@@ -96,7 +96,7 @@ def connect_to_robot(
         dict: Connection status with ping and port check results.
     """
     # Set default values if None
-    actual_ip = ip if ip is not None else "127.0.0.1"
+    actual_ip = ip if ip is not None else "localhost"
     actual_port = int(port) if port is not None else 9090
 
     # Set the IP and port
@@ -1137,8 +1137,8 @@ def get_actions() -> dict:
     # rosbridge service call to get action list
     message = {
         "op": "call_service",
-        "service": "/rosapi/actions",
-        "type": "rosapi/Actions",
+        "service": "/rosapi/action_servers",
+        "type": "rosapi/ActionServers",
         "args": {},
         "id": "get_actions_request_1",
     }
@@ -1147,18 +1147,25 @@ def get_actions() -> dict:
     with ws_manager:
         response = ws_manager.request(message)
 
+    # Handle error responses from ws_manager
+    if response and "error" in response:
+        return {"error": f"WebSocket error: {response['error']}"}
+
     # Check for service response errors first
     if response and "result" in response and not response["result"]:
         # Service call failed - return error with details from values
-        error_msg = response.get("values", {}).get("message", "Service call failed")
+        if "values" in response and isinstance(response["values"], dict):
+            error_msg = response["values"].get("message", "Service call failed")
+        else:
+            error_msg = "Service call failed"
         return {"error": f"Service call failed: {error_msg}"}
 
     # Return action info if present
     if response and "values" in response:
-        actions = response["values"].get("actions", [])
+        actions = response["values"].get("action_servers", [])
         return {"actions": actions, "action_count": len(actions)}
     else:
-        return {"warning": "No actions found"}
+        return {"warning": "No actions found or /rosapi/action_servers service not available"}
 
 
 ## ############################################################################################## ##
