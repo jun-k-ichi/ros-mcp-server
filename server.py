@@ -1191,17 +1191,17 @@ def get_action_type(action: str) -> dict:
 
     # Since there's no direct action_type service, we'll derive it from known patterns
     # or use a mapping approach for common actions
-    
+
     # Known action type mappings
     action_type_map = {
         "/turtle1/rotate_absolute": "turtlesim/action/RotateAbsolute",
         # Add more mappings as needed
     }
-    
+
     # Check if it's a known action
     if action in action_type_map:
         return {"action": action, "type": action_type_map[action]}
-    
+
     # For unknown actions, try to derive the type from interfaces list
     # First get all interfaces to see if we can find a matching action type
     interfaces_message = {
@@ -1217,24 +1217,24 @@ def get_action_type(action: str) -> dict:
 
     if interfaces_response and "values" in interfaces_response:
         interfaces = interfaces_response["values"].get("interfaces", [])
-        
+
         # Look for action interfaces that might match
         action_interfaces = [iface for iface in interfaces if "/action/" in iface]
-        
+
         # Try to match based on action name patterns
         action_name_part = action.split("/")[-1]  # Get last part (e.g., "rotate_absolute")
-        
+
         for iface in action_interfaces:
             if action_name_part.lower() in iface.lower():
                 return {"action": action, "type": iface}
-        
+
         # If no exact match, return the list of available action interfaces
         return {
             "error": f"Action type for {action} not found",
             "available_action_types": action_interfaces,
-            "suggestion": "This action might not be available or use a different naming pattern"
+            "suggestion": "This action might not be available or use a different naming pattern",
         }
-    
+
     return {"error": f"Failed to get type for action {action}"}
 
 
@@ -1371,19 +1371,19 @@ def inspect_all_actions() -> dict:
         for action in actions:
             # Try to get action type (this may not always work due to rosapi limitations)
             action_type = "unknown"
-            
+
             # Known action type mappings for common actions
             action_type_map = {
                 "/turtle1/rotate_absolute": "turtlesim/action/RotateAbsolute",
                 # Add more mappings as needed based on common ROS actions
             }
-            
+
             if action in action_type_map:
                 action_type = action_type_map[action]
             else:
                 # Try to derive from interfaces
                 interfaces_message = {
-                "op": "call_service",
+                    "op": "call_service",
                     "service": "/rosapi/interfaces",
                     "type": "rosapi/Interfaces",
                     "args": {},
@@ -1394,7 +1394,7 @@ def inspect_all_actions() -> dict:
                 if interfaces_response and "values" in interfaces_response:
                     interfaces = interfaces_response["values"].get("interfaces", [])
                     action_interfaces = [iface for iface in interfaces if "/action/" in iface]
-                    
+
                     # Try to match based on action name patterns
                     action_name_part = action.split("/")[-1]
                     for iface in action_interfaces:
@@ -1414,6 +1414,102 @@ def inspect_all_actions() -> dict:
         }
 
 
+@mcp.tool(
+    description=(
+        "Send a goal to a ROS action server.\n"
+        "Example:\n"
+        "send_action_goal('/turtle1/rotate_absolute', 'turtlesim/action/RotateAbsolute', {'theta': 1.57})"
+    )
+)
+def send_action_goal(
+    action_name: str, action_type: str, goal: dict, timeout: Optional[float] = None
+) -> dict:
+    """
+    Send a goal to a ROS action server.
+
+    Args:
+        action_name (str): The name of the action to call (e.g., '/turtle1/rotate_absolute')
+        action_type (str): The type of the action (e.g., 'turtlesim/action/RotateAbsolute')
+        goal (dict): The goal message to send
+        timeout (float, optional): Timeout for action completion in seconds. Default is None (no timeout).
+
+    Returns:
+        dict: Contains action response including goal_id, status, and result.
+    """
+    # Validate inputs
+    if not action_name or not action_name.strip():
+        return {"error": "Action name cannot be empty"}
+
+    if not action_type or not action_type.strip():
+        return {"error": "Action type cannot be empty"}
+
+    if not goal:
+        return {"error": "Goal cannot be empty"}
+
+    # Generate unique goal ID
+    goal_id = f"goal_{int(time.time() * 1000)}_{uuid.uuid4().hex[:8]}"
+
+    # rosbridge action goal message
+    # Based on rosbridge source code, it expects "args" instead of "goal"
+    message = {
+        "op": "send_action_goal",
+        "id": goal_id,
+        "action": action_name,
+        "action_type": action_type,
+        "args": goal,  # rosbridge expects "args" not "goal"
+        "feedback": True,  # Enable feedback messages
+    }
+
+    # Send the action goal through rosbridge
+    with ws_manager:
+        send_error = ws_manager.send(message)
+        if send_error:
+            return {
+                "action": action_name,
+                "action_type": action_type,
+                "success": False,
+                "error": f"Failed to send action goal: {send_error}",
+            }
+
+        # Wait for response
+        actual_timeout = timeout if timeout is not None else ws_manager.default_timeout
+        response = ws_manager.receive(timeout=actual_timeout)
+
+        if response:
+            try:
+                msg_data = json.loads(response)
+
+                # Check for status errors
+                if msg_data.get("op") == "status" and msg_data.get("level") == "error":
+                    return {
+                        "action": action_name,
+                        "action_type": action_type,
+                        "success": False,
+                        "error": f"Action goal failed: {msg_data.get('msg', 'Unknown error')}",
+                    }
+
+                # Check for action response
+                if msg_data.get("op") == "action_result":
+                    return {
+                        "action": action_name,
+                        "action_type": action_type,
+                        "success": True,
+                        "goal_id": goal_id,
+                        "status": msg_data.get("status", "unknown"),
+                        "result": msg_data.get("result", {}),
+                    }
+
+            except json.JSONDecodeError:
+                pass
+
+    return {
+        "action": action_name,
+        "action_type": action_type,
+        "success": True,
+        "goal_id": goal_id,
+        "status": "sent",
+        "note": "Goal sent successfully. Action may be executing asynchronously.",
+    }
 
 
 ## ############################################################################################## ##
