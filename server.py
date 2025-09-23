@@ -1168,6 +1168,75 @@ def get_actions() -> dict:
         return {"warning": "No actions found or /rosapi/action_servers service not available"}
 
 
+@mcp.tool(
+    description=(
+        "Get the action type for a specific action.\nExample:\nget_action_type('/turtle1/rotate_absolute')"
+    )
+)
+def get_action_type(action: str) -> dict:
+    """
+    Get the action type for a specific action.
+
+    Args:
+        action (str): The action name (e.g., '/turtle1/rotate_absolute')
+
+    Returns:
+        dict: Contains the action type,
+            or an error message if action doesn't exist.
+    """
+    # Validate input
+    if not action or not action.strip():
+        return {"error": "Action name cannot be empty"}
+
+    # Since there's no direct action_type service, we'll derive it from known patterns
+    # or use a mapping approach for common actions
+    
+    # Known action type mappings
+    action_type_map = {
+        "/turtle1/rotate_absolute": "turtlesim/action/RotateAbsolute",
+        # Add more mappings as needed
+    }
+    
+    # Check if it's a known action
+    if action in action_type_map:
+        return {"action": action, "type": action_type_map[action]}
+    
+    # For unknown actions, try to derive the type from interfaces list
+    # First get all interfaces to see if we can find a matching action type
+    interfaces_message = {
+        "op": "call_service",
+        "service": "/rosapi/interfaces",
+        "type": "rosapi/Interfaces",
+        "args": {},
+        "id": f"get_interfaces_for_action_{action.replace('/', '_')}",
+    }
+
+    with ws_manager:
+        interfaces_response = ws_manager.request(interfaces_message)
+
+    if interfaces_response and "values" in interfaces_response:
+        interfaces = interfaces_response["values"].get("interfaces", [])
+        
+        # Look for action interfaces that might match
+        action_interfaces = [iface for iface in interfaces if "/action/" in iface]
+        
+        # Try to match based on action name patterns
+        action_name_part = action.split("/")[-1]  # Get last part (e.g., "rotate_absolute")
+        
+        for iface in action_interfaces:
+            if action_name_part.lower() in iface.lower():
+                return {"action": action, "type": iface}
+        
+        # If no exact match, return the list of available action interfaces
+        return {
+            "error": f"Action type for {action} not found",
+            "available_action_types": action_interfaces,
+            "suggestion": "This action might not be available or use a different naming pattern"
+        }
+    
+    return {"error": f"Failed to get type for action {action}"}
+
+
 ## ############################################################################################## ##
 ##
 ##                       NETWORK DIAGNOSTICS
