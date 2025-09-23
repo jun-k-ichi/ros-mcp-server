@@ -2,6 +2,7 @@ import io
 import json
 import os
 import time
+import uuid
 from typing import Any, Dict, List, Optional, Union
 
 from fastmcp import FastMCP
@@ -1235,6 +1236,184 @@ def get_action_type(action: str) -> dict:
         }
     
     return {"error": f"Failed to get type for action {action}"}
+
+
+@mcp.tool(
+    description=(
+        "Get complete action details including goal, result, and feedback structures.\n"
+        "Example:\n"
+        "get_action_details('turtlesim/action/RotateAbsolute')"
+    )
+)
+def get_action_details(action_type: str) -> dict:
+    """
+    Get complete action details including goal, result, and feedback structures.
+
+    Args:
+        action_type (str): The action type (e.g., 'turtlesim/action/RotateAbsolute')
+
+    Returns:
+        dict: Contains complete action definition with goal, result, and feedback structures.
+    """
+    # Validate input
+    if not action_type or not action_type.strip():
+        return {"error": "Action type cannot be empty"}
+
+    result = {"action_type": action_type, "goal": {}, "result": {}, "feedback": {}}
+
+    # Get goal, result, and feedback details in a single WebSocket context
+    with ws_manager:
+        # Get goal details using action-specific service
+        goal_message = {
+            "op": "call_service",
+            "service": "/rosapi/action_goal_details",
+            "type": "rosapi_msgs/srv/ActionGoalDetails",
+            "args": {"type": action_type},
+            "id": f"get_action_goal_details_{action_type.replace('/', '_')}",
+        }
+
+        goal_response = ws_manager.request(goal_message)
+        if goal_response and "values" in goal_response:
+            typedefs = goal_response["values"].get("typedefs", [])
+            if typedefs:
+                for typedef in typedefs:
+                    field_names = typedef.get("fieldnames", [])
+                    field_types = typedef.get("fieldtypes", [])
+                    fields = {}
+                    for name, ftype in zip(field_names, field_types):
+                        fields[name] = ftype
+                    result["goal"] = {"fields": fields, "field_count": len(fields)}
+
+        # Get result details using action-specific service
+        result_message = {
+            "op": "call_service",
+            "service": "/rosapi/action_result_details",
+            "type": "rosapi_msgs/srv/ActionResultDetails",
+            "args": {"type": action_type},
+            "id": f"get_action_result_details_{action_type.replace('/', '_')}",
+        }
+
+        result_response = ws_manager.request(result_message)
+        if result_response and "values" in result_response:
+            typedefs = result_response["values"].get("typedefs", [])
+            if typedefs:
+                for typedef in typedefs:
+                    field_names = typedef.get("fieldnames", [])
+                    field_types = typedef.get("fieldtypes", [])
+                    fields = {}
+                    for name, ftype in zip(field_names, field_types):
+                        fields[name] = ftype
+                    result["result"] = {"fields": fields, "field_count": len(fields)}
+
+        # Get feedback details using action-specific service
+        feedback_message = {
+            "op": "call_service",
+            "service": "/rosapi/action_feedback_details",
+            "type": "rosapi_msgs/srv/ActionFeedbackDetails",
+            "args": {"type": action_type},
+            "id": f"get_action_feedback_details_{action_type.replace('/', '_')}",
+        }
+
+        feedback_response = ws_manager.request(feedback_message)
+        if feedback_response and "values" in feedback_response:
+            typedefs = feedback_response["values"].get("typedefs", [])
+            if typedefs:
+                for typedef in typedefs:
+                    field_names = typedef.get("fieldnames", [])
+                    field_types = typedef.get("fieldtypes", [])
+                    fields = {}
+                    for name, ftype in zip(field_names, field_types):
+                        fields[name] = ftype
+                    result["feedback"] = {"fields": fields, "field_count": len(fields)}
+
+    # Check if we got any data
+    if not result["goal"] and not result["result"] and not result["feedback"]:
+        return {"error": f"Action type {action_type} not found or has no definition"}
+
+    return result
+
+
+@mcp.tool(
+    description=(
+        "Get comprehensive information about all actions including types and available actions.\n"
+        "Example:\n"
+        "inspect_all_actions()"
+    )
+)
+def inspect_all_actions() -> dict:
+    """
+    Get comprehensive information about all actions including types and available actions.
+
+    Returns:
+        dict: Contains detailed information about all actions,
+            including action names, types, and server information.
+    """
+    # First get all actions
+    actions_message = {
+        "op": "call_service",
+        "service": "/rosapi/action_servers",
+        "type": "rosapi/ActionServers",
+        "args": {},
+        "id": "inspect_all_actions_request_1",
+    }
+
+    with ws_manager:
+        actions_response = ws_manager.request(actions_message)
+
+        if not actions_response or "values" not in actions_response:
+            return {"error": "Failed to get actions list"}
+
+        actions = actions_response["values"].get("action_servers", [])
+        action_details = {}
+
+        # Get details for each action
+        action_errors = []
+        for action in actions:
+            # Try to get action type (this may not always work due to rosapi limitations)
+            action_type = "unknown"
+            
+            # Known action type mappings for common actions
+            action_type_map = {
+                "/turtle1/rotate_absolute": "turtlesim/action/RotateAbsolute",
+                # Add more mappings as needed based on common ROS actions
+            }
+            
+            if action in action_type_map:
+                action_type = action_type_map[action]
+            else:
+                # Try to derive from interfaces
+                interfaces_message = {
+                "op": "call_service",
+                    "service": "/rosapi/interfaces",
+                    "type": "rosapi/Interfaces",
+                    "args": {},
+                    "id": f"get_interfaces_{action.replace('/', '_')}",
+                }
+
+                interfaces_response = ws_manager.request(interfaces_message)
+                if interfaces_response and "values" in interfaces_response:
+                    interfaces = interfaces_response["values"].get("interfaces", [])
+                    action_interfaces = [iface for iface in interfaces if "/action/" in iface]
+                    
+                    # Try to match based on action name patterns
+                    action_name_part = action.split("/")[-1]
+                    for iface in action_interfaces:
+                        if action_name_part.lower() in iface.lower():
+                            action_type = iface
+                            break
+
+            action_details[action] = {
+                "type": action_type,
+                "status": "available" if action_type != "unknown" else "type_unknown",
+            }
+
+        return {
+            "total_actions": len(actions),
+            "actions": action_details,
+            "action_errors": action_errors,
+        }
+
+
 
 
 ## ############################################################################################## ##
