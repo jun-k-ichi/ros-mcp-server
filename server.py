@@ -1418,11 +1418,12 @@ def inspect_all_actions() -> dict:
     description=(
         "Send a goal to a ROS action server.\n"
         "Example:\n"
-        "send_action_goal('/turtle1/rotate_absolute', 'turtlesim/action/RotateAbsolute', {'theta': 1.57})"
+        "send_action_goal('/turtle1/rotate_absolute', 'turtlesim/action/RotateAbsolute', {'theta': 1.57})\n"
+        "send_action_goal('/turtle1/rotate_absolute', 'turtlesim/action/RotateAbsolute', {'theta': 1.57}, blocking=False)  # Non-blocking"
     )
 )
 def send_action_goal(
-    action_name: str, action_type: str, goal: dict, timeout: Optional[float] = None
+    action_name: str, action_type: str, goal: dict, timeout: Optional[float] = None, blocking: bool = True
 ) -> dict:
     """
     Send a goal to a ROS action server.
@@ -1432,6 +1433,7 @@ def send_action_goal(
         action_type (str): The type of the action (e.g., 'turtlesim/action/RotateAbsolute')
         goal (dict): The goal message to send
         timeout (float, optional): Timeout for action completion in seconds. Default is None (no timeout).
+        blocking (bool): If True, wait for action completion. If False, return immediately after sending.
 
     Returns:
         dict: Contains action response including goal_id, status, and result.
@@ -1456,7 +1458,7 @@ def send_action_goal(
         "id": goal_id,
         "action": action_name,
         "action_type": action_type,
-        "args": goal,  # rosbridge expects "args" not "goal"
+        "args": goal,  # rosbridge expects "args" not "goal" as in previous versions
         "feedback": True,  # Enable feedback messages
     }
 
@@ -1471,36 +1473,51 @@ def send_action_goal(
                 "error": f"Failed to send action goal: {send_error}",
             }
 
-        # Wait for response
-        actual_timeout = timeout if timeout is not None else ws_manager.default_timeout
-        response = ws_manager.receive(timeout=actual_timeout)
+        # Handle blocking vs non-blocking mode
+        if not blocking:
+            # Non-blocking mode: return immediately after sending
+            return {
+                "action": action_name,
+                "action_type": action_type,
+                "success": True,
+                "goal_id": goal_id,
+                "status": "sent",
+                "note": "Goal sent successfully in non-blocking mode. Use get_action_result to check completion.",
+            }
+        
+        # Blocking mode: wait for response with timeout
+        actual_timeout = timeout if timeout is not None else 30.0  # Increased default timeout
+        start_time = time.time()
+        
+        while time.time() - start_time < actual_timeout:
+            response = ws_manager.receive(timeout=2.0)  # Check every 2 seconds
+            
+            if response:
+                try:
+                    msg_data = json.loads(response)
 
-        if response:
-            try:
-                msg_data = json.loads(response)
+                    # Check for status errors
+                    if msg_data.get("op") == "status" and msg_data.get("level") == "error":
+                        return {
+                            "action": action_name,
+                            "action_type": action_type,
+                            "success": False,
+                            "error": f"Action goal failed: {msg_data.get('msg', 'Unknown error')}",
+                        }
 
-                # Check for status errors
-                if msg_data.get("op") == "status" and msg_data.get("level") == "error":
-                    return {
-                        "action": action_name,
-                        "action_type": action_type,
-                        "success": False,
-                        "error": f"Action goal failed: {msg_data.get('msg', 'Unknown error')}",
-                    }
+                    # Check for action response
+                    if msg_data.get("op") == "action_result":
+                        return {
+                            "action": action_name,
+                            "action_type": action_type,
+                            "success": msg_data.get("result", False),
+                            "goal_id": goal_id,
+                            "status": msg_data.get("status", "unknown"),
+                            "result": msg_data.get("values", {}),
+                        }
 
-                # Check for action response
-                if msg_data.get("op") == "action_result":
-                    return {
-                        "action": action_name,
-                        "action_type": action_type,
-                        "success": True,
-                        "goal_id": goal_id,
-                        "status": msg_data.get("status", "unknown"),
-                        "result": msg_data.get("result", {}),
-                    }
-
-            except json.JSONDecodeError:
-                pass
+                except json.JSONDecodeError:
+                    continue
 
     return {
         "action": action_name,
@@ -1509,6 +1526,88 @@ def send_action_goal(
         "goal_id": goal_id,
         "status": "sent",
         "note": "Goal sent successfully. Action may be executing asynchronously.",
+    }
+
+
+@mcp.tool(
+    description=(
+        "Get the result of an action goal.\n"
+        "Example:\n"
+        "get_action_result('/turtle1/rotate_absolute', 'goal_1758652066913_6322f1aa', timeout=10.0)"
+    )
+)
+def get_action_result(
+    action_name: str, goal_id: str, timeout: Optional[float] = None
+) -> dict:
+    """
+    Get the result of an action goal.
+
+    Args:
+        action_name (str): The name of the action (e.g., '/turtle1/rotate_absolute')
+        goal_id (str): The goal ID returned from send_action_goal
+        timeout (float, optional): Timeout for waiting for result in seconds. Default is None (use default timeout).
+
+    Returns:
+        dict: Contains the action result including status, result data, and metadata.
+    """
+    # Validate inputs
+    if not action_name or not action_name.strip():
+        return {"error": "Action name cannot be empty"}
+    
+    if not goal_id or not goal_id.strip():
+        return {"error": "Goal ID cannot be empty"}
+
+    # Rosbridge action results are handled differently
+    # Instead of subscribing to topics, we need to wait for action_result messages
+    # that rosbridge sends back directly
+    
+    # Wait for result message
+    with ws_manager:
+        # Wait for result message
+        actual_timeout = timeout if timeout is not None else ws_manager.default_timeout
+        start_time = time.time()
+        
+        while time.time() - start_time < actual_timeout:
+            response = ws_manager.receive(timeout=1.0)  # Short timeout for polling
+            
+            if response:
+                try:
+                    msg_data = json.loads(response)
+                    
+                    # Check for action_result messages from rosbridge
+                    if msg_data.get("op") == "action_result":
+                        # Check if this result matches our goal ID or action
+                        if (msg_data.get("id") == goal_id or 
+                            msg_data.get("action") == action_name):
+                            return {
+                                "action": action_name,
+                                "goal_id": goal_id,
+                                "success": msg_data.get("result", False),
+                                "status": msg_data.get("status", "unknown"),
+                                "result": msg_data.get("values", {}),
+                                "timestamp": time.time(),
+                            }
+                    
+                    # Check for status messages
+                    elif msg_data.get("op") == "status" and msg_data.get("level") == "error":
+                        if msg_data.get("id") == goal_id:
+                            return {
+                                "action": action_name,
+                                "goal_id": goal_id,
+                                "success": False,
+                                "error": f"Action failed: {msg_data.get('msg', 'Unknown error')}",
+                                "timestamp": time.time(),
+                            }
+                
+                except json.JSONDecodeError:
+                    continue
+
+    return {
+        "action": action_name,
+        "goal_id": goal_id,
+        "success": False,
+        "error": f"Timeout waiting for action result after {actual_timeout} seconds",
+        "note": "Action may still be executing or may have failed",
     }
 
 
