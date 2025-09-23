@@ -1611,6 +1611,86 @@ def get_action_result(
     }
 
 
+@mcp.tool(
+    description=(
+        "Cancel a specific action goal.\n"
+        "Example:\n"
+        "cancel_action_goal('/turtle1/rotate_absolute', 'goal_1758653551839_21acd486')"
+    )
+)
+def cancel_action_goal(action_name: str, goal_id: str) -> dict:
+    """
+    Cancel a specific action goal.
+
+    Args:
+        action_name (str): The name of the action (e.g., '/turtle1/rotate_absolute')
+        goal_id (str): The goal ID to cancel
+
+    Returns:
+        dict: Contains cancellation status and result.
+    """
+    # Validate inputs
+    if not action_name or not action_name.strip():
+        return {"error": "Action name cannot be empty"}
+    
+    if not goal_id or not goal_id.strip():
+        return {"error": "Goal ID cannot be empty"}
+
+    # Create cancel message for rosbridge (based on rosbridge source code)
+    cancel_message = {
+        "op": "cancel_action_goal",
+        "id": goal_id,  # Use the actual goal ID, not a new one
+        "action": action_name,
+    }
+
+    # Send the cancel request through rosbridge
+    with ws_manager:
+        send_error = ws_manager.send(cancel_message)
+        if send_error:
+            return {
+                "action": action_name,
+                "goal_id": goal_id,
+                "success": False,
+                "error": f"Failed to send cancel request: {send_error}",
+            }
+
+        # Wait for response
+        response = ws_manager.receive(timeout=5.0)
+        
+        if response:
+            try:
+                msg_data = json.loads(response)
+                
+                # Check for status messages
+                if msg_data.get("op") == "status":
+                    if msg_data.get("level") == "error":
+                        return {
+                            "action": action_name,
+                            "goal_id": goal_id,
+                            "success": False,
+                            "error": f"Cancel failed: {msg_data.get('msg', 'Unknown error')}",
+                        }
+                    else:
+                        return {
+                            "action": action_name,
+                            "goal_id": goal_id,
+                            "success": True,
+                            "status": "cancel_sent",
+                            "message": msg_data.get("msg", "Cancel request sent"),
+                        }
+                
+            except json.JSONDecodeError:
+                pass
+
+    return {
+        "action": action_name,
+        "goal_id": goal_id,
+        "success": True,
+        "status": "cancel_sent",
+        "note": "Cancel request sent successfully. Action may still be executing.",
+    }
+
+
 ## ############################################################################################## ##
 ##
 ##                       NETWORK DIAGNOSTICS
