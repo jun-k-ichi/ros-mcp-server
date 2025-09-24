@@ -1423,7 +1423,11 @@ def inspect_all_actions() -> dict:
     )
 )
 def send_action_goal(
-    action_name: str, action_type: str, goal: dict, timeout: Optional[float] = None, blocking: bool = True
+    action_name: str,
+    action_type: str,
+    goal: dict,
+    timeout: Optional[float] = None,
+    blocking: bool = True,
 ) -> dict:
     """
     Send a goal to a ROS action server.
@@ -1484,14 +1488,14 @@ def send_action_goal(
                 "status": "sent",
                 "note": "Goal sent successfully in non-blocking mode. Use get_action_result to check completion.",
             }
-        
+
         # Blocking mode: wait for response with timeout
         actual_timeout = timeout if timeout is not None else 30.0  # Increased default timeout
         start_time = time.time()
-        
+
         while time.time() - start_time < actual_timeout:
             response = ws_manager.receive(timeout=2.0)  # Check every 2 seconds
-            
+
             if response:
                 try:
                     msg_data = json.loads(response)
@@ -1528,6 +1532,7 @@ def send_action_goal(
         "note": "Goal sent successfully. Action may be executing asynchronously.",
     }
 
+
 @mcp.tool(
     description=(
         "Cancel a specific action goal.\n"
@@ -1549,7 +1554,7 @@ def cancel_action_goal(action_name: str, goal_id: str) -> dict:
     # Validate inputs
     if not action_name or not action_name.strip():
         return {"error": "Action name cannot be empty"}
-    
+
     if not goal_id or not goal_id.strip():
         return {"error": "Goal ID cannot be empty"}
 
