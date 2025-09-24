@@ -13,6 +13,26 @@ from utils.config_utils import get_robot_specifications, parse_robot_config
 from utils.network_utils import ping_ip_and_port
 from utils.websocket_manager import WebSocketManager, parse_image, parse_json
 
+# Import ROS services from tools module
+from tools.ros_services import (
+    get_services,
+    get_service_type,
+    get_service_details,
+    get_service_providers,
+    inspect_all_services,
+    call_service,
+)
+
+# Import ROS actions from tools module
+from tools.ros_actions import (
+    get_actions,
+    get_action_type,
+    get_action_details,
+    inspect_all_actions,
+    send_action_goal,
+    cancel_action_goal,
+)
+
 # ROS bridge connection settings
 ROSBRIDGE_IP = "127.0.0.1"  # Default is localhost. Replace with your local IPor set using the LLM.
 ROSBRIDGE_PORT = (
@@ -37,6 +57,118 @@ mcp = FastMCP("ros-mcp-server")
 ws_manager = WebSocketManager(
     ROSBRIDGE_IP, ROSBRIDGE_PORT, default_timeout=5.0
 )  # Increased default timeout for ROS operations
+
+
+# Register ROS service tools with the MCP server
+@mcp.tool(description=("Get list of all available ROS services.\nExample:\nget_services()"))
+def get_services_tool() -> dict:
+    return get_services(ws_manager)
+
+
+@mcp.tool(
+    description=(
+        "Get the service type for a specific service.\nExample:\nget_service_type('/rosapi/topics')"
+    )
+)
+def get_service_type_tool(service: str) -> dict:
+    return get_service_type(service, ws_manager)
+
+
+@mcp.tool(
+    description=(
+        "Get complete service details including request and response structures.\nExample:\nget_service_details('my_package/CustomService')"
+    )
+)
+def get_service_details_tool(service_type: str) -> dict:
+    return get_service_details(service_type, ws_manager)
+
+
+@mcp.tool(
+    description=(
+        "Get list of nodes that provide a specific service.\nExample:\nget_service_providers('/rosapi/topics')"
+    )
+)
+def get_service_providers_tool(service: str) -> dict:
+    return get_service_providers(service, ws_manager)
+
+
+@mcp.tool(
+    description=(
+        "Get comprehensive information about all services including types and providers.\nExample:\ninspect_all_services()"
+    )
+)
+def inspect_all_services_tool() -> dict:
+    return inspect_all_services(ws_manager)
+
+
+@mcp.tool(
+    description=(
+        "Call a ROS service with specified request data.\nExample:\ncall_service('/rosapi/topics', 'rosapi/Topics', {})\ncall_service('/slow_service', 'my_package/SlowService', {}, timeout=10.0)  # Specify timeout only for slow services"
+    )
+)
+def call_service_tool(
+    service_name: str, service_type: str, request: dict, timeout: Optional[float] = None
+) -> dict:
+    return call_service(service_name, service_type, request, ws_manager, timeout)
+
+
+# Register ROS action tools with the MCP server
+@mcp.tool(description=("Get list of all available ROS actions.\nExample:\nget_actions()"))
+def get_actions_tool() -> dict:
+    return get_actions(ws_manager)
+
+
+@mcp.tool(
+    description=(
+        "Get the action type for a specific action.\nExample:\nget_action_type('/turtle1/rotate_absolute')"
+    )
+)
+def get_action_type_tool(action: str) -> dict:
+    return get_action_type(action, ws_manager)
+
+
+@mcp.tool(
+    description=(
+        "Get complete action details including goal, result, and feedback structures.\nExample:\nget_action_details('turtlesim/action/RotateAbsolute')"
+    )
+)
+def get_action_details_tool(action_type: str) -> dict:
+    return get_action_details(action_type, ws_manager)
+
+
+@mcp.tool(
+    description=(
+        "Get comprehensive information about all actions including types and available actions.\nExample:\ninspect_all_actions()"
+    )
+)
+def inspect_all_actions_tool() -> dict:
+    return inspect_all_actions(ws_manager)
+
+
+@mcp.tool(
+    description=(
+        "Send a goal to a ROS action server.\nExample:"
+        "send_action_goal('/turtle1/rotate_absolute', 'turtlesim/action/RotateAbsolute', {'theta': 1.57})"
+        "send_action_goal('/turtle1/rotate_absolute', 'turtlesim/action/RotateAbsolute', {'theta': 1.57}, blocking=False)  # Non-blocking"
+    )
+)
+def send_action_goal_tool(
+    action_name: str,
+    action_type: str,
+    goal: dict,
+    timeout: Optional[float] = None,
+    blocking: bool = True,
+) -> dict:
+    return send_action_goal(action_name, action_type, goal, ws_manager, timeout, blocking)
+
+
+@mcp.tool(
+    description=(
+        "Cancel a specific action goal.\nExample:\ncancel_action_goal('/turtle1/rotate_absolute', 'goal_1758653551839_21acd486')"
+    )
+)
+def cancel_action_goal_tool(action_name: str, goal_id: str) -> dict:
+    return cancel_action_goal(action_name, goal_id, ws_manager)
 
 
 @mcp.tool(description=("Get robot configuration from YAML file."))
@@ -742,846 +874,6 @@ def publish_for_durations(
         "topic": topic,
         "msg_type": msg_type,
         "errors": errors,  # Include any errors encountered during publishing
-    }
-
-
-## ############################################################################################## ##
-##
-##                       ROS SERVICES
-##
-## ############################################################################################## ##
-
-
-@mcp.tool(description=("Get list of all available ROS services.\nExample:\nget_services()"))
-def get_services() -> dict:
-    """
-    Get list of all available ROS services.
-
-    Returns:
-        dict: Contains list of all active services,
-            or a message string if no services are found.
-    """
-    # rosbridge service call to get service list
-    message = {
-        "op": "call_service",
-        "service": "/rosapi/services",
-        "type": "rosapi/Services",
-        "args": {},
-        "id": "get_services_request_1",
-    }
-
-    # Request service list from rosbridge
-    with ws_manager:
-        response = ws_manager.request(message)
-
-    # Check for service response errors first
-    if response and "result" in response and not response["result"]:
-        # Service call failed - return error with details from values
-        error_msg = response.get("values", {}).get("message", "Service call failed")
-        return {"error": f"Service call failed: {error_msg}"}
-
-    # Return service info if present
-    if response and "values" in response:
-        services = response["values"].get("services", [])
-        return {"services": services, "service_count": len(services)}
-    else:
-        return {"warning": "No services found"}
-
-
-@mcp.tool(
-    description=(
-        "Get the service type for a specific service.\nExample:\nget_service_type('/rosapi/topics')"
-    )
-)
-def get_service_type(service: str) -> dict:
-    """
-    Get the service type for a specific service.
-
-    Args:
-        service (str): The service name (e.g., '/rosapi/topics')
-
-    Returns:
-        dict: Contains the service type,
-            or an error message if service doesn't exist.
-    """
-    # Validate input
-    if not service or not service.strip():
-        return {"error": "Service name cannot be empty"}
-
-    # rosbridge service call to get service type
-    message = {
-        "op": "call_service",
-        "service": "/rosapi/service_type",
-        "type": "rosapi/ServiceType",
-        "args": {"service": service},
-        "id": f"get_service_type_request_{service.replace('/', '_')}",
-    }
-
-    # Request service type from rosbridge
-    with ws_manager:
-        response = ws_manager.request(message)
-
-    # Check for service response errors first
-    if response and "result" in response and not response["result"]:
-        # Service call failed - return error with details from values
-        error_msg = response.get("values", {}).get("message", "Service call failed")
-        return {"error": f"Service call failed: {error_msg}"}
-
-    # Return service type if present
-    if response and "values" in response:
-        service_type = response["values"].get("type", "")
-        if service_type:
-            return {"service": service, "type": service_type}
-        else:
-            return {"error": f"Service {service} does not exist or has no type"}
-    else:
-        return {"error": f"Failed to get type for service {service}"}
-
-
-@mcp.tool(
-    description=(
-        "Get complete service details including request and response structures.\n"
-        "Example:\n"
-        "get_service_details('my_package/CustomService')"
-    )
-)
-def get_service_details(service_type: str) -> dict:
-    """
-    Get complete service details including request and response structures.
-
-    Args:
-        service_type (str): The service type (e.g., 'my_package/CustomService')
-
-    Returns:
-        dict: Contains complete service definition with request and response structures.
-    """
-    # Validate input
-    if not service_type or not service_type.strip():
-        return {"error": "Service type cannot be empty"}
-
-    result = {"service_type": service_type, "request": {}, "response": {}}
-
-    # Get both request and response details in a single WebSocket context
-    with ws_manager:
-        # Get request details
-        request_message = {
-            "op": "call_service",
-            "service": "/rosapi/service_request_details",
-            "type": "rosapi/ServiceRequestDetails",
-            "args": {"type": service_type},
-            "id": f"get_service_details_request_{service_type.replace('/', '_')}",
-        }
-
-        request_response = ws_manager.request(request_message)
-        if request_response and "values" in request_response:
-            typedefs = request_response["values"].get("typedefs", [])
-            if typedefs:
-                for typedef in typedefs:
-                    field_names = typedef.get("fieldnames", [])
-                    field_types = typedef.get("fieldtypes", [])
-                    fields = {}
-                    for name, ftype in zip(field_names, field_types):
-                        fields[name] = ftype
-                    result["request"] = {"fields": fields, "field_count": len(fields)}
-
-        # Get response details
-        response_message = {
-            "op": "call_service",
-            "service": "/rosapi/service_response_details",
-            "type": "rosapi/ServiceResponseDetails",
-            "args": {"type": service_type},
-            "id": f"get_service_details_response_{service_type.replace('/', '_')}",
-        }
-
-        response_response = ws_manager.request(response_message)
-        if response_response and "values" in response_response:
-            typedefs = response_response["values"].get("typedefs", [])
-            if typedefs:
-                for typedef in typedefs:
-                    field_names = typedef.get("fieldnames", [])
-                    field_types = typedef.get("fieldtypes", [])
-                    fields = {}
-                    for name, ftype in zip(field_names, field_types):
-                        fields[name] = ftype
-                    result["response"] = {"fields": fields, "field_count": len(fields)}
-
-    # Check if we got any data
-    if not result["request"] and not result["response"]:
-        return {"error": f"Service type {service_type} not found or has no definition"}
-
-    return result
-
-
-@mcp.tool(
-    description=(
-        "Get list of nodes that provide a specific service.\n"
-        "Example:\n"
-        "get_service_providers('/rosapi/topics')"
-    )
-)
-def get_service_providers(service: str) -> dict:
-    """
-    Get list of nodes that provide a specific service.
-
-    Args:
-        service (str): The service name (e.g., '/rosapi/topics')
-
-    Returns:
-        dict: Contains list of nodes providing this service,
-            or an error message if service doesn't exist.
-    """
-    # Validate input
-    if not service or not service.strip():
-        return {"error": "Service name cannot be empty"}
-
-    # rosbridge service call to get service providers
-    message = {
-        "op": "call_service",
-        "service": "/rosapi/service_providers",
-        "type": "rosapi/ServiceProviders",
-        "args": {"service": service},
-        "id": f"get_service_providers_request_{service.replace('/', '_')}",
-    }
-
-    # Request service providers from rosbridge
-    with ws_manager:
-        response = ws_manager.request(message)
-
-    # Return service providers if present
-    if response and "values" in response:
-        providers = response["values"].get("providers", [])
-        return {"service": service, "providers": providers, "provider_count": len(providers)}
-    else:
-        return {"error": f"Failed to get providers for service {service}"}
-
-
-@mcp.tool(
-    description=(
-        "Get comprehensive information about all services including types and providers.\n"
-        "Example:\n"
-        "inspect_all_services()"
-    )
-)
-def inspect_all_services() -> dict:
-    """
-    Get comprehensive information about all services including types and providers.
-
-    Returns:
-        dict: Contains detailed information about all services,
-            including service names, types, and provider nodes.
-    """
-    # First get all services
-    services_message = {
-        "op": "call_service",
-        "service": "/rosapi/services",
-        "type": "rosapi/Services",
-        "args": {},
-        "id": "inspect_all_services_request_1",
-    }
-
-    with ws_manager:
-        services_response = ws_manager.request(services_message)
-
-        if not services_response or "values" not in services_response:
-            return {"error": "Failed to get services list"}
-
-        services = services_response["values"].get("services", [])
-        service_details = {}
-
-        # Get details for each service
-        service_errors = []
-        for service in services:
-            # Get service type
-            type_message = {
-                "op": "call_service",
-                "service": "/rosapi/service_type",
-                "type": "rosapi/ServiceType",
-                "args": {"service": service},
-                "id": f"get_type_{service.replace('/', '_')}",
-            }
-
-            type_response = ws_manager.request(type_message)
-            service_type = ""
-            if type_response and "values" in type_response:
-                service_type = type_response["values"].get("type", "unknown")
-            elif type_response and "error" in type_response:
-                service_errors.append(f"Service {service}: {type_response['error']}")
-
-            # Get service providers
-            providers_message = {
-                "op": "call_service",
-                "service": "/rosapi/service_providers",
-                "type": "rosapi/ServiceProviders",
-                "args": {"service": service},
-                "id": f"get_providers_{service.replace('/', '_')}",
-            }
-
-            providers_response = ws_manager.request(providers_message)
-            providers = []
-            if providers_response and "values" in providers_response:
-                providers = providers_response["values"].get("providers", [])
-            elif providers_response and "error" in providers_response:
-                service_errors.append(f"Service {service} providers: {providers_response['error']}")
-
-            service_details[service] = {
-                "type": service_type,
-                "providers": providers,
-                "provider_count": len(providers),
-            }
-
-        return {
-            "total_services": len(services),
-            "services": service_details,
-            "service_errors": service_errors,  # Include any errors encountered during inspection
-        }
-
-
-@mcp.tool(
-    description=(
-        "Call a ROS service with specified request data.\n"
-        "Example:\n"
-        "call_service('/rosapi/topics', 'rosapi/Topics', {})\n"
-        "call_service('/slow_service', 'my_package/SlowService', {}, timeout=10.0)  # Specify timeout only for slow services"
-    )
-)
-def call_service(
-    service_name: str, service_type: str, request: dict, timeout: Optional[float] = None
-) -> dict:
-    """
-    Call a ROS service with specified request data.
-
-    Args:
-        service_name (str): The service name (e.g., '/rosapi/topics')
-        service_type (str): The service type (e.g., 'rosapi/Topics')
-        request (dict): Service request data as a dictionary
-        timeout (Optional[float]): Timeout in seconds. If None, uses the default timeout.
-
-    Returns:
-        dict: Contains the service response or error information.
-    """
-    # rosbridge service call
-    message = {
-        "op": "call_service",
-        "service": service_name,
-        "type": service_type,
-        "args": request,
-        "id": f"call_service_request_{service_name.replace('/', '_')}",
-    }
-
-    # Call the service through rosbridge
-    with ws_manager:
-        response = ws_manager.request(message, timeout=timeout)
-
-    # Check for service response errors first
-    if response and "result" in response and not response["result"]:
-        # Service call failed - return error with details from values
-        error_msg = response.get("values", {}).get("message", "Service call failed")
-        return {
-            "service": service_name,
-            "service_type": service_type,
-            "success": False,
-            "error": f"Service call failed: {error_msg}",
-        }
-
-    # Return service response if present
-    if response:
-        if response.get("op") == "service_response":
-            # Alternative response format
-            return {
-                "service": service_name,
-                "service_type": service_type,
-                "success": response.get("result", True),
-                "result": response.get("values", {}),
-            }
-        elif response.get("op") == "status" and response.get("level") == "error":
-            # Error response
-            return {
-                "service": service_name,
-                "service_type": service_type,
-                "success": False,
-                "error": response.get("msg", "Unknown error"),
-            }
-        else:
-            # Unexpected response format
-            return {
-                "service": service_name,
-                "service_type": service_type,
-                "success": False,
-                "error": "Unexpected response format",
-                "raw_response": response,
-            }
-    else:
-        return {
-            "service": service_name,
-            "service_type": service_type,
-            "success": False,
-            "error": "No response received from service call",
-        }
-
-
-## ############################################################################################## ##
-##
-##                       ROS ACTIONS
-##
-## ############################################################################################## ##
-
-
-@mcp.tool(description=("Get list of all available ROS actions.\nExample:\nget_actions()"))
-def get_actions() -> dict:
-    """
-    Get list of all available ROS actions.
-
-    Returns:
-        dict: Contains list of all active actions,
-            or a message string if no actions are found.
-    """
-    # rosbridge service call to get action list
-    message = {
-        "op": "call_service",
-        "service": "/rosapi/action_servers",
-        "type": "rosapi/ActionServers",
-        "args": {},
-        "id": "get_actions_request_1",
-    }
-
-    # Request action list from rosbridge
-    with ws_manager:
-        response = ws_manager.request(message)
-
-    # Handle error responses from ws_manager
-    if response and "error" in response:
-        return {"error": f"WebSocket error: {response['error']}"}
-
-    # Check for service response errors first
-    if response and "result" in response and not response["result"]:
-        # Service call failed - return error with details from values
-        if "values" in response and isinstance(response["values"], dict):
-            error_msg = response["values"].get("message", "Service call failed")
-        else:
-            error_msg = "Service call failed"
-        return {"error": f"Service call failed: {error_msg}"}
-
-    # Return action info if present
-    if response and "values" in response:
-        actions = response["values"].get("action_servers", [])
-        return {"actions": actions, "action_count": len(actions)}
-    else:
-        return {"warning": "No actions found or /rosapi/action_servers service not available"}
-
-
-@mcp.tool(
-    description=(
-        "Get the action type for a specific action.\nExample:\nget_action_type('/turtle1/rotate_absolute')"
-    )
-)
-def get_action_type(action: str) -> dict:
-    """
-    Get the action type for a specific action.
-
-    Args:
-        action (str): The action name (e.g., '/turtle1/rotate_absolute')
-
-    Returns:
-        dict: Contains the action type,
-            or an error message if action doesn't exist.
-    """
-    # Validate input
-    if not action or not action.strip():
-        return {"error": "Action name cannot be empty"}
-
-    # Since there's no direct action_type service, we'll derive it from known patterns
-    # or use a mapping approach for common actions
-
-    # Known action type mappings
-    action_type_map = {
-        "/turtle1/rotate_absolute": "turtlesim/action/RotateAbsolute",
-        # Add more mappings as needed
-    }
-
-    # Check if it's a known action
-    if action in action_type_map:
-        return {"action": action, "type": action_type_map[action]}
-
-    # For unknown actions, try to derive the type from interfaces list
-    # First get all interfaces to see if we can find a matching action type
-    interfaces_message = {
-        "op": "call_service",
-        "service": "/rosapi/interfaces",
-        "type": "rosapi/Interfaces",
-        "args": {},
-        "id": f"get_interfaces_for_action_{action.replace('/', '_')}",
-    }
-
-    with ws_manager:
-        interfaces_response = ws_manager.request(interfaces_message)
-
-    if interfaces_response and "values" in interfaces_response:
-        interfaces = interfaces_response["values"].get("interfaces", [])
-
-        # Look for action interfaces that might match
-        action_interfaces = [iface for iface in interfaces if "/action/" in iface]
-
-        # Try to match based on action name patterns
-        action_name_part = action.split("/")[-1]  # Get last part (e.g., "rotate_absolute")
-
-        for iface in action_interfaces:
-            if action_name_part.lower() in iface.lower():
-                return {"action": action, "type": iface}
-
-        # If no exact match, return the list of available action interfaces
-        return {
-            "error": f"Action type for {action} not found",
-            "available_action_types": action_interfaces,
-            "suggestion": "This action might not be available or use a different naming pattern",
-        }
-
-    return {"error": f"Failed to get type for action {action}"}
-
-
-@mcp.tool(
-    description=(
-        "Get complete action details including goal, result, and feedback structures.\n"
-        "Example:\n"
-        "get_action_details('turtlesim/action/RotateAbsolute')"
-    )
-)
-def get_action_details(action_type: str) -> dict:
-    """
-    Get complete action details including goal, result, and feedback structures.
-
-    Args:
-        action_type (str): The action type (e.g., 'turtlesim/action/RotateAbsolute')
-
-    Returns:
-        dict: Contains complete action definition with goal, result, and feedback structures.
-    """
-    # Validate input
-    if not action_type or not action_type.strip():
-        return {"error": "Action type cannot be empty"}
-
-    result = {"action_type": action_type, "goal": {}, "result": {}, "feedback": {}}
-
-    # Get goal, result, and feedback details in a single WebSocket context
-    with ws_manager:
-        # Get goal details using action-specific service
-        goal_message = {
-            "op": "call_service",
-            "service": "/rosapi/action_goal_details",
-            "type": "rosapi_msgs/srv/ActionGoalDetails",
-            "args": {"type": action_type},
-            "id": f"get_action_goal_details_{action_type.replace('/', '_')}",
-        }
-
-        goal_response = ws_manager.request(goal_message)
-        if goal_response and "values" in goal_response:
-            typedefs = goal_response["values"].get("typedefs", [])
-            if typedefs:
-                for typedef in typedefs:
-                    field_names = typedef.get("fieldnames", [])
-                    field_types = typedef.get("fieldtypes", [])
-                    fields = {}
-                    for name, ftype in zip(field_names, field_types):
-                        fields[name] = ftype
-                    result["goal"] = {"fields": fields, "field_count": len(fields)}
-
-        # Get result details using action-specific service
-        result_message = {
-            "op": "call_service",
-            "service": "/rosapi/action_result_details",
-            "type": "rosapi_msgs/srv/ActionResultDetails",
-            "args": {"type": action_type},
-            "id": f"get_action_result_details_{action_type.replace('/', '_')}",
-        }
-
-        result_response = ws_manager.request(result_message)
-        if result_response and "values" in result_response:
-            typedefs = result_response["values"].get("typedefs", [])
-            if typedefs:
-                for typedef in typedefs:
-                    field_names = typedef.get("fieldnames", [])
-                    field_types = typedef.get("fieldtypes", [])
-                    fields = {}
-                    for name, ftype in zip(field_names, field_types):
-                        fields[name] = ftype
-                    result["result"] = {"fields": fields, "field_count": len(fields)}
-
-        # Get feedback details using action-specific service
-        feedback_message = {
-            "op": "call_service",
-            "service": "/rosapi/action_feedback_details",
-            "type": "rosapi_msgs/srv/ActionFeedbackDetails",
-            "args": {"type": action_type},
-            "id": f"get_action_feedback_details_{action_type.replace('/', '_')}",
-        }
-
-        feedback_response = ws_manager.request(feedback_message)
-        if feedback_response and "values" in feedback_response:
-            typedefs = feedback_response["values"].get("typedefs", [])
-            if typedefs:
-                for typedef in typedefs:
-                    field_names = typedef.get("fieldnames", [])
-                    field_types = typedef.get("fieldtypes", [])
-                    fields = {}
-                    for name, ftype in zip(field_names, field_types):
-                        fields[name] = ftype
-                    result["feedback"] = {"fields": fields, "field_count": len(fields)}
-
-    # Check if we got any data
-    if not result["goal"] and not result["result"] and not result["feedback"]:
-        return {"error": f"Action type {action_type} not found or has no definition"}
-
-    return result
-
-
-@mcp.tool(
-    description=(
-        "Get comprehensive information about all actions including types and available actions.\n"
-        "Example:\n"
-        "inspect_all_actions()"
-    )
-)
-def inspect_all_actions() -> dict:
-    """
-    Get comprehensive information about all actions including types and available actions.
-
-    Returns:
-        dict: Contains detailed information about all actions,
-            including action names, types, and server information.
-    """
-    # First get all actions
-    actions_message = {
-        "op": "call_service",
-        "service": "/rosapi/action_servers",
-        "type": "rosapi/ActionServers",
-        "args": {},
-        "id": "inspect_all_actions_request_1",
-    }
-
-    with ws_manager:
-        actions_response = ws_manager.request(actions_message)
-
-        if not actions_response or "values" not in actions_response:
-            return {"error": "Failed to get actions list"}
-
-        actions = actions_response["values"].get("action_servers", [])
-        action_details = {}
-
-        # Get details for each action
-        action_errors = []
-        for action in actions:
-            # Try to get action type (this may not always work due to rosapi limitations)
-            action_type = "unknown"
-
-            # Known action type mappings for common actions
-            action_type_map = {
-                "/turtle1/rotate_absolute": "turtlesim/action/RotateAbsolute",
-                # Add more mappings as needed based on common ROS actions
-            }
-
-            if action in action_type_map:
-                action_type = action_type_map[action]
-            else:
-                # Try to derive from interfaces
-                interfaces_message = {
-                    "op": "call_service",
-                    "service": "/rosapi/interfaces",
-                    "type": "rosapi/Interfaces",
-                    "args": {},
-                    "id": f"get_interfaces_{action.replace('/', '_')}",
-                }
-
-                interfaces_response = ws_manager.request(interfaces_message)
-                if interfaces_response and "values" in interfaces_response:
-                    interfaces = interfaces_response["values"].get("interfaces", [])
-                    action_interfaces = [iface for iface in interfaces if "/action/" in iface]
-
-                    # Try to match based on action name patterns
-                    action_name_part = action.split("/")[-1]
-                    for iface in action_interfaces:
-                        if action_name_part.lower() in iface.lower():
-                            action_type = iface
-                            break
-
-            action_details[action] = {
-                "type": action_type,
-                "status": "available" if action_type != "unknown" else "type_unknown",
-            }
-
-        return {
-            "total_actions": len(actions),
-            "actions": action_details,
-            "action_errors": action_errors,
-        }
-
-
-@mcp.tool(
-    description=(
-        "Send a goal to a ROS action server.\n"
-        "Example:\n"
-        "send_action_goal('/turtle1/rotate_absolute', 'turtlesim/action/RotateAbsolute', {'theta': 1.57})\n"
-        "send_action_goal('/turtle1/rotate_absolute', 'turtlesim/action/RotateAbsolute', {'theta': 1.57}, blocking=False)  # Non-blocking"
-    )
-)
-def send_action_goal(
-    action_name: str,
-    action_type: str,
-    goal: dict,
-    timeout: Optional[float] = None,
-    blocking: bool = True,
-) -> dict:
-    """
-    Send a goal to a ROS action server.
-
-    Args:
-        action_name (str): The name of the action to call (e.g., '/turtle1/rotate_absolute')
-        action_type (str): The type of the action (e.g., 'turtlesim/action/RotateAbsolute')
-        goal (dict): The goal message to send
-        timeout (float, optional): Timeout for action completion in seconds. Default is None (no timeout).
-        blocking (bool): If True, wait for action completion. If False, return immediately after sending.
-
-    Returns:
-        dict: Contains action response including goal_id, status, and result.
-    """
-    # Validate inputs
-    if not action_name or not action_name.strip():
-        return {"error": "Action name cannot be empty"}
-
-    if not action_type or not action_type.strip():
-        return {"error": "Action type cannot be empty"}
-
-    if not goal:
-        return {"error": "Goal cannot be empty"}
-
-    # Generate unique goal ID
-    goal_id = f"goal_{int(time.time() * 1000)}_{uuid.uuid4().hex[:8]}"
-
-    # rosbridge action goal message
-    # Based on rosbridge source code, it expects "args" instead of "goal"
-    message = {
-        "op": "send_action_goal",
-        "id": goal_id,
-        "action": action_name,
-        "action_type": action_type,
-        "args": goal,  # rosbridge expects "args" not "goal" as in previous versions
-        "feedback": True,  # Enable feedback messages
-    }
-
-    # Send the action goal through rosbridge
-    with ws_manager:
-        send_error = ws_manager.send(message)
-        if send_error:
-            return {
-                "action": action_name,
-                "action_type": action_type,
-                "success": False,
-                "error": f"Failed to send action goal: {send_error}",
-            }
-
-        # Handle blocking vs non-blocking mode
-        if not blocking:
-            # Non-blocking mode: return immediately after sending
-            return {
-                "action": action_name,
-                "action_type": action_type,
-                "success": True,
-                "goal_id": goal_id,
-                "status": "sent",
-                "note": "Goal sent successfully in non-blocking mode. Use get_action_result to check completion.",
-            }
-
-        # Blocking mode: wait for response with timeout
-        actual_timeout = timeout if timeout is not None else 30.0  # Increased default timeout
-        start_time = time.time()
-
-        while time.time() - start_time < actual_timeout:
-            response = ws_manager.receive(timeout=2.0)  # Check every 2 seconds
-
-            if response:
-                try:
-                    msg_data = json.loads(response)
-
-                    # Check for status errors
-                    if msg_data.get("op") == "status" and msg_data.get("level") == "error":
-                        return {
-                            "action": action_name,
-                            "action_type": action_type,
-                            "success": False,
-                            "error": f"Action goal failed: {msg_data.get('msg', 'Unknown error')}",
-                        }
-
-                    # Check for action response
-                    if msg_data.get("op") == "action_result":
-                        return {
-                            "action": action_name,
-                            "action_type": action_type,
-                            "success": msg_data.get("result", False),
-                            "goal_id": goal_id,
-                            "status": msg_data.get("status", "unknown"),
-                            "result": msg_data.get("values", {}),
-                        }
-
-                except json.JSONDecodeError:
-                    continue
-
-    return {
-        "action": action_name,
-        "action_type": action_type,
-        "success": True,
-        "goal_id": goal_id,
-        "status": "sent",
-        "note": "Goal sent successfully. Action may be executing asynchronously.",
-    }
-
-
-@mcp.tool(
-    description=(
-        "Cancel a specific action goal.\n"
-        "Example:\n"
-        "cancel_action_goal('/turtle1/rotate_absolute', 'goal_1758653551839_21acd486')"
-    )
-)
-def cancel_action_goal(action_name: str, goal_id: str) -> dict:
-    """
-    Cancel a specific action goal.
-
-    Args:
-        action_name (str): The name of the action (e.g., '/turtle1/rotate_absolute')
-        goal_id (str): The goal ID to cancel
-
-    Returns:
-        dict: Contains cancellation status and result.
-    """
-    # Validate inputs
-    if not action_name or not action_name.strip():
-        return {"error": "Action name cannot be empty"}
-
-    if not goal_id or not goal_id.strip():
-        return {"error": "Goal ID cannot be empty"}
-
-    # Create cancel message for rosbridge (based on rosbridge source code)
-    cancel_message = {
-        "op": "cancel_action_goal",
-        "id": goal_id,  # Use the actual goal ID, not a new one
-        "action": action_name,
-    }
-
-    # Send the cancel request through rosbridge
-    with ws_manager:
-        send_error = ws_manager.send(cancel_message)
-        if send_error:
-            return {
-                "action": action_name,
-                "goal_id": goal_id,
-                "success": False,
-                "error": f"Failed to send cancel request: {send_error}",
-            }
-
-    return {
-        "action": action_name,
-        "goal_id": goal_id,
-        "success": True,
-        "status": "cancel_sent",
-        "note": "Cancel request sent successfully. Action may still be executing.",
     }
 
 
