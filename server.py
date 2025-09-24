@@ -2,36 +2,34 @@ import io
 import json
 import os
 import time
-import uuid
 from typing import Any, Dict, List, Optional, Union
 
 from fastmcp import FastMCP
 from fastmcp.utilities.types import Image
 from PIL import Image as PILImage
 
-from utils.config_utils import get_robot_specifications, parse_robot_config
-from utils.network_utils import ping_ip_and_port
-from utils.websocket_manager import WebSocketManager, parse_image, parse_json
+# Import ROS actions from tools module
+from tools.ros_actions import (
+    cancel_action_goal,
+    get_action_details,
+    get_action_type,
+    get_actions,
+    inspect_all_actions,
+    send_action_goal,
+)
 
 # Import ROS services from tools module
 from tools.ros_services import (
-    get_services,
-    get_service_type,
+    call_service,
     get_service_details,
     get_service_providers,
+    get_service_type,
+    get_services,
     inspect_all_services,
-    call_service,
 )
-
-# Import ROS actions from tools module
-from tools.ros_actions import (
-    get_actions,
-    get_action_type,
-    get_action_details,
-    inspect_all_actions,
-    send_action_goal,
-    cancel_action_goal,
-)
+from utils.config_utils import get_robot_specifications, parse_robot_config
+from utils.network_utils import ping_ip_and_port
+from utils.websocket_manager import WebSocketManager, parse_image, parse_json
 
 # ROS bridge connection settings
 ROSBRIDGE_IP = "127.0.0.1"  # Default is localhost. Replace with your local IPor set using the LLM.
