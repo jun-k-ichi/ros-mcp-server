@@ -98,7 +98,6 @@ class WebSocketManager:
         self.ws = None
         self.lock = threading.RLock()
 
-
     def set_ip(self, ip: str, port: int):
         """
         Set the IP and port for the WebSocket connection.

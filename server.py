@@ -2,15 +2,17 @@ import io
 import json
 import os
 import time
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from fastmcp import FastMCP
 from fastmcp.utilities.types import Image
 from PIL import Image as PILImage
 
-# Import ROS tool registration functions
-from tools.ros_services import register_service_tools
+# Import tools
 from tools.ros_actions import register_action_tools
+from tools.ros_services import register_service_tools
+
+# Import utils
 from utils.config_utils import get_robot_specifications, parse_robot_config
 from utils.network_utils import ping_ip_and_port
 from utils.websocket_manager import WebSocketManager, parse_image, parse_json
@@ -852,4 +854,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
