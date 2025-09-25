@@ -11,8 +11,8 @@ from PIL import Image as PILImage
 
 # Import tools
 from tools.ros_actions import register_action_tools
-from tools.ros_services import register_service_tools
 from tools.ros_parameters import register_parameters_tools
+from tools.ros_services import register_service_tools
 
 # Import utils
 from utils.config_utils import get_robot_specifications, parse_robot_config
@@ -1046,10 +1046,6 @@ def inspect_all_nodes() -> dict:
             "nodes": node_details,
             "node_errors": node_errors,  # Include any errors encountered during inspection
         }
-
-
-
-
 
 
 ## ############################################################################################## ##

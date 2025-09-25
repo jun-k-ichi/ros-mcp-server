@@ -283,19 +283,23 @@ def get_param_details(name: str, ws_manager) -> dict:
                 # Try to parse as different types
                 if param_value.lower() in ["true", "false"]:
                     param_type = "bool"
-                elif param_value.isdigit() or (param_value.startswith('-') and param_value[1:].isdigit()):
+                elif param_value.isdigit() or (
+                    param_value.startswith("-") and param_value[1:].isdigit()
+                ):
                     param_type = "int"
-                elif param_value.replace('.', '', 1).isdigit() or (param_value.startswith('-') and param_value[1:].replace('.', '', 1).isdigit()):
+                elif param_value.replace(".", "", 1).isdigit() or (
+                    param_value.startswith("-") and param_value[1:].replace(".", "", 1).isdigit()
+                ):
                     param_type = "float"
                 elif param_value.startswith('"') and param_value.endswith('"'):
                     param_type = "string"
-                elif param_value.startswith('[') and param_value.endswith(']'):
+                elif param_value.startswith("[") and param_value.endswith("]"):
                     param_type = "list"
-                elif param_value.startswith('{') and param_value.endswith('}'):
+                elif param_value.startswith("{") and param_value.endswith("}"):
                     param_type = "dict"
                 else:
                     param_type = "string"  # Default to string
-            except:
+            except Exception:
                 param_type = "string"
 
         result["parameters"][name] = {
