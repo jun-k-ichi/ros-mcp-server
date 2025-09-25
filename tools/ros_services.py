@@ -247,11 +247,11 @@ def inspect_all_services(ws_manager) -> dict:
             elif type_response and "error" in type_response:
                 service_errors.append(f"Service {service}: {type_response['error']}")
 
-            # Get service providers
+            # Get service providers (using service_node instead of service_providers)
             providers_message = {
                 "op": "call_service",
-                "service": "/rosapi/service_providers",
-                "type": "rosapi/ServiceProviders",
+                "service": "/rosapi/service_node",
+                "type": "rosapi/ServiceNode",
                 "args": {"service": service},
                 "id": f"get_providers_{service.replace('/', '_')}",
             }
@@ -259,7 +259,13 @@ def inspect_all_services(ws_manager) -> dict:
             providers_response = ws_manager.request(providers_message)
             providers = []
             if providers_response and "values" in providers_response:
-                providers = providers_response["values"].get("providers", [])
+                node = providers_response["values"].get("node", "")
+                if node:
+                    providers = [node]
+            elif providers_response and "result" in providers_response:
+                node = providers_response["result"].get("node", "")
+                if node:
+                    providers = [node]
             elif providers_response and "error" in providers_response:
                 service_errors.append(f"Service {service} providers: {providers_response['error']}")
 
