@@ -8,25 +8,9 @@ from fastmcp import FastMCP
 from fastmcp.utilities.types import Image
 from PIL import Image as PILImage
 
-# Import ROS actions from tools module
-from tools.ros_actions import (
-    cancel_action_goal,
-    get_action_details,
-    get_action_type,
-    get_actions,
-    inspect_all_actions,
-    send_action_goal,
-)
-
-# Import ROS services from tools module
-from tools.ros_services import (
-    call_service,
-    get_service_details,
-    get_service_providers,
-    get_service_type,
-    get_services,
-    inspect_all_services,
-)
+# Import ROS tool registration functions
+from tools.ros_services import register_service_tools
+from tools.ros_actions import register_action_tools
 from utils.config_utils import get_robot_specifications, parse_robot_config
 from utils.network_utils import ping_ip_and_port
 from utils.websocket_manager import WebSocketManager, parse_image, parse_json
@@ -57,116 +41,9 @@ ws_manager = WebSocketManager(
 )  # Increased default timeout for ROS operations
 
 
-# Register ROS service tools with the MCP server
-@mcp.tool(description=("Get list of all available ROS services.\nExample:\nget_services()"))
-def get_services_tool() -> dict:
-    return get_services(ws_manager)
-
-
-@mcp.tool(
-    description=(
-        "Get the service type for a specific service.\nExample:\nget_service_type('/rosapi/topics')"
-    )
-)
-def get_service_type_tool(service: str) -> dict:
-    return get_service_type(service, ws_manager)
-
-
-@mcp.tool(
-    description=(
-        "Get complete service details including request and response structures.\nExample:\nget_service_details('my_package/CustomService')"
-    )
-)
-def get_service_details_tool(service_type: str) -> dict:
-    return get_service_details(service_type, ws_manager)
-
-
-@mcp.tool(
-    description=(
-        "Get list of nodes that provide a specific service.\nExample:\nget_service_providers('/rosapi/topics')"
-    )
-)
-def get_service_providers_tool(service: str) -> dict:
-    return get_service_providers(service, ws_manager)
-
-
-@mcp.tool(
-    description=(
-        "Get comprehensive information about all services including types and providers.\nExample:\ninspect_all_services()"
-    )
-)
-def inspect_all_services_tool() -> dict:
-    return inspect_all_services(ws_manager)
-
-
-@mcp.tool(
-    description=(
-        "Call a ROS service with specified request data.\nExample:\ncall_service('/rosapi/topics', 'rosapi/Topics', {})\ncall_service('/slow_service', 'my_package/SlowService', {}, timeout=10.0)  # Specify timeout only for slow services"
-    )
-)
-def call_service_tool(
-    service_name: str, service_type: str, request: dict, timeout: Optional[float] = None
-) -> dict:
-    return call_service(service_name, service_type, request, ws_manager, timeout)
-
-
-# Register ROS action tools with the MCP server
-@mcp.tool(description=("Get list of all available ROS actions.\nExample:\nget_actions()"))
-def get_actions_tool() -> dict:
-    return get_actions(ws_manager)
-
-
-@mcp.tool(
-    description=(
-        "Get the action type for a specific action.\nExample:\nget_action_type('/turtle1/rotate_absolute')"
-    )
-)
-def get_action_type_tool(action: str) -> dict:
-    return get_action_type(action, ws_manager)
-
-
-@mcp.tool(
-    description=(
-        "Get complete action details including goal, result, and feedback structures.\nExample:\nget_action_details('turtlesim/action/RotateAbsolute')"
-    )
-)
-def get_action_details_tool(action_type: str) -> dict:
-    return get_action_details(action_type, ws_manager)
-
-
-@mcp.tool(
-    description=(
-        "Get comprehensive information about all actions including types and available actions.\nExample:\ninspect_all_actions()"
-    )
-)
-def inspect_all_actions_tool() -> dict:
-    return inspect_all_actions(ws_manager)
-
-
-@mcp.tool(
-    description=(
-        "Send a goal to a ROS action server.\nExample:"
-        "send_action_goal('/turtle1/rotate_absolute', 'turtlesim/action/RotateAbsolute', {'theta': 1.57})"
-        "send_action_goal('/turtle1/rotate_absolute', 'turtlesim/action/RotateAbsolute', {'theta': 1.57}, blocking=False)  # Non-blocking"
-    )
-)
-def send_action_goal_tool(
-    action_name: str,
-    action_type: str,
-    goal: dict,
-    timeout: Optional[float] = None,
-    blocking: bool = True,
-) -> dict:
-    return send_action_goal(action_name, action_type, goal, ws_manager, timeout, blocking)
-
-
-@mcp.tool(
-    description=(
-        "Cancel a specific action goal.\nExample:\ncancel_action_goal('/turtle1/rotate_absolute', 'goal_1758653551839_21acd486')"
-    )
-)
-def cancel_action_goal_tool(action_name: str, goal_id: str) -> dict:
-    return cancel_action_goal(action_name, goal_id, ws_manager)
+# Register all ROS tools
+register_service_tools(mcp, ws_manager)
+register_action_tools(mcp, ws_manager)
 
 
 @mcp.tool(description=("Get robot configuration from YAML file."))
@@ -209,8 +86,8 @@ def list_verified_robot_specifications() -> dict:
     )
 )
 def connect_to_robot(
-    ip: Optional[str] = None,
-    port: Optional[Union[int, str]] = None,
+    ip: str = ROSBRIDGE_IP,
+    port: int = ROSBRIDGE_PORT,
     ping_timeout: float = 2.0,
     port_timeout: float = 2.0,
 ) -> dict:
@@ -218,7 +95,7 @@ def connect_to_robot(
     Connect to a robot by setting the IP and port for the WebSocket connection, then testing connectivity.
 
     Args:
-        ip (Optional[str]): The IP address of the rosbridge server. Defaults to "127.0.0.1" (localhost).
+        ip (Optional[str]): The IP address of the rosbridge server. Defaults is localhost.
         port (Optional[int]): The port number of the rosbridge server. Defaults to 9090.
         ping_timeout (float): Timeout for ping in seconds. Default = 2.0.
         port_timeout (float): Timeout for port check in seconds. Default = 2.0.
@@ -226,9 +103,10 @@ def connect_to_robot(
     Returns:
         dict: Connection status with ping and port check results.
     """
+
     # Set default values if None
-    actual_ip = ip if ip is not None else "localhost"
-    actual_port = int(port) if port is not None else 9090
+    actual_ip = str(ip).strip() if ip else "localhost"
+    actual_port = int(port) if port else 9090
 
     # Set the IP and port
     ws_manager.set_ip(actual_ip, actual_port)
@@ -974,3 +852,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
