@@ -23,11 +23,34 @@ Below are detailed instructions for each of these steps.
 git clone https://github.com/robotmcp/ros-mcp-server.git
 ```
 
-Note the **absolute path** to the cloned directory — you’ll need this later when configuring your language model client.
+Note the **absolute path** to the cloned directory — you'll need this later when configuring your language model client.
+
+## 1.2. Understanding MCP Server Transport Options
+
+The ROS MCP Server supports multiple transport protocols for communication with language model clients:
+
+- **`stdio`** (default): Direct standard input/output communication - recommended for most clients
+- **`http`** or **`streamable-http`**: HTTP-based communication for network access
+- **`sse`**: Server-Sent Events (currently unsupported)
+
+You can configure the transport using command-line arguments when starting the server:
+
+```bash
+# Default stdio transport (recommended for Claude Desktop, Cursor)
+uv run server.py
+
+# HTTP transport with custom host and port
+uv run server.py --transport http --host 127.0.0.1 --port 9000
+```
+
+**Command-line Arguments:**
+- `--transport`: Choose transport protocol (default: stdio, http, streamable-http, sse)
+- `--host`: Host address for HTTP-based transports (default: 127.0.0.1)
+- `--port`: Port number for HTTP-based transports (default: 9000)
 
 ---
 
-## 1.2. Install UV (Python Virtual Environment Manager)
+## 1.3. Install UV (Python Virtual Environment Manager)
 
 You can install [`uv`](https://github.com/astral-sh/uv) using one of the following methods:
 
@@ -48,6 +71,22 @@ pip install uv
 ```
 
 </details>
+
+---
+
+## 1.4. Manual Server Startup (Optional)
+
+For HTTP-based transports, you may need to manually start the MCP server before connecting your language model client:
+
+```bash
+# Navigate to the ros-mcp-server directory
+cd /path/to/ros-mcp-server
+
+# Start with streamable HTTP transport
+uv run server.py --transport streamable-http --host 127.0.0.1 --port 9000
+```
+
+**Note:** For `stdio` transport (default), the server is automatically started by the language model client, so manual startup is not required.
 
 ---
 
@@ -96,6 +135,8 @@ Any LLM client that supports MCP can be used. We use **Claude Desktop** for test
 </p>
 
 ## 2.4. Troubleshooting
+
+### Common Connection Issues
 - If the `ros-mcp-server` doesn't appear even after correctly configuring `claude_desktop_config.json`, try completely shutting down Claude Desktop using the commands below and then restarting it. This could be a Claude Desktop caching issue.
 ```bash
 # Completely terminate Claude Desktop processes
@@ -105,6 +146,30 @@ killall claude-desktop
 
 # Restart Claude Desktop
 claude-desktop
+```
+
+### Transport-Specific Troubleshooting
+
+**stdio Transport Issues:**
+- Verify that `uv` is properly installed and accessible
+- Check that the server.py file exists in the specified directory
+- Ensure the absolute path is correct (no `~` shortcuts in JSON)
+
+**HTTP Transport Issues:**
+- Make sure the MCP server is manually started before connecting the client
+- Verify the host and port are accessible (default: 127.0.0.1:9000)
+- Check for port conflicts with other services
+- For network access, use `0.0.0.0` as host instead of `127.0.0.1`
+
+**Testing Server Startup:**
+```bash
+# Test stdio transport
+cd /path/to/ros-mcp-server
+uv run server.py --transport stdio
+
+# Test HTTP transport
+uv run server.py --transport http --host 127.0.0.1 --port 9000
+# Then test connection: curl http://127.0.0.1:9000/mcp
 ```
 
 </details>
@@ -125,6 +190,7 @@ claude-desktop
 - Add the following to the `"mcpServers"` section of the JSON file
 - Make sure to replace `<ABSOLUTE_PATH>` with the **full absolute path** to your `ros-mcp-server` folder (note: `~` for home directory may not work in JSON files):
 
+**Recommended stdio Configuration:**
 ```json
 {
   "mcpServers": {
@@ -172,6 +238,7 @@ This will have Claude running on Windows and the MCP server running on WSL. We a
 - Set the **full WSL path** to your `uv` installation (e.g., `/home/youruser/.local/bin/uv`)
 - Use the correct **WSL distribution name** (e.g., `"Ubuntu-22.04"`)
 
+**Recommended stdio Configuration:**
 ```json
 {
   "mcpServers": {
