@@ -111,6 +111,10 @@ def connect_to_robot(
     if actual_ip == "127":
         actual_ip = "127.0.0.1"
 
+    # Fix truncated IP addresses (MCP sometimes truncates "127.0.0.1" to "127")
+    if actual_ip == "127":
+        actual_ip = "127.0.0.1"
+
     # Set the IP and port
     ws_manager.set_ip(actual_ip, actual_port)
 
@@ -884,6 +888,166 @@ def get_nodes() -> dict:
 
 @mcp.tool(
     description=(
+        "Get detailed information about a specific node including its publishers, subscribers, and services.\n"
+        "Example:\n"
+        "get_node_details('/turtlesim')"
+    )
+)
+def get_node_details(node: str) -> dict:
+    """
+    Get detailed information about a specific node including its publishers, subscribers, and services.
+
+    Args:
+        node (str): The node name (e.g., '/turtlesim')
+
+    Returns:
+        dict: Contains detailed node information including publishers, subscribers, and services,
+            or an error message if node doesn't exist.
+    """
+    # Validate input
+    if not node or not node.strip():
+        return {"error": "Node name cannot be empty"}
+
+    result = {
+        "node": node,
+        "publishers": [],
+        "subscribers": [],
+        "services": [],
+        "publisher_count": 0,
+        "subscriber_count": 0,
+        "service_count": 0,
+    }
+
+    # rosbridge service call to get node details
+    message = {
+        "op": "call_service",
+        "service": "/rosapi/node_details",
+        "type": "rosapi/NodeDetails",
+        "args": {"node": node},
+        "id": f"get_node_details_{node.replace('/', '_')}",
+    }
+
+    # Request node details from rosbridge
+    with ws_manager:
+        response = ws_manager.request(message)
+
+    # Check for service response errors first
+    if response and "result" in response and not response["result"]:
+        # Service call failed - return error with details from values
+        error_msg = response.get("values", {}).get("message", "Service call failed")
+        return {"error": f"Service call failed: {error_msg}"}
+
+    # Extract data from the response
+    if response and "values" in response:
+        values = response["values"]
+        # Extract publishers, subscribers, and services from the response
+        # Note: rosapi uses "publishing" and "subscribing" field names
+        publishers = values.get("publishing", [])
+        subscribers = values.get("subscribing", [])
+        services = values.get("services", [])
+
+        result["publishers"] = publishers
+        result["subscribers"] = subscribers
+        result["services"] = services
+        result["publisher_count"] = len(publishers)
+        result["subscriber_count"] = len(subscribers)
+        result["service_count"] = len(services)
+
+    # Check if we got any data
+    if not result["publishers"] and not result["subscribers"] and not result["services"]:
+        return {"error": f"Node {node} not found or has no details available"}
+
+    return result
+
+
+@mcp.tool(
+    description=(
+        "Get comprehensive information about all ROS nodes including their publishers, subscribers, and services.\n"
+        "Example:\n"
+        "inspect_all_nodes()"
+    )
+)
+def inspect_all_nodes() -> dict:
+    """
+    Get comprehensive information about all ROS nodes including their publishers, subscribers, and services.
+
+    Returns:
+        dict: Contains detailed information about all nodes including:
+            - Node names and details
+            - Publishers for each node
+            - Subscribers for each node
+            - Services provided by each node
+            - Connection counts and statistics
+    """
+    # First get all nodes
+    nodes_message = {
+        "op": "call_service",
+        "service": "/rosapi/nodes",
+        "type": "rosapi/Nodes",
+        "args": {},
+        "id": "inspect_all_nodes_request_1",
+    }
+
+    with ws_manager:
+        nodes_response = ws_manager.request(nodes_message)
+
+        if not nodes_response or "values" not in nodes_response:
+            return {"error": "Failed to get nodes list"}
+
+        nodes = nodes_response["values"].get("nodes", [])
+        node_details = {}
+
+        # Get details for each node
+        node_errors = []
+        for node in nodes:
+            # Get node details (publishers, subscribers, services)
+            node_details_message = {
+                "op": "call_service",
+                "service": "/rosapi/node_details",
+                "type": "rosapi/NodeDetails",
+                "args": {"node": node},
+                "id": f"get_node_details_{node.replace('/', '_')}",
+            }
+
+            node_details_response = ws_manager.request(node_details_message)
+
+            if node_details_response and "values" in node_details_response:
+                values = node_details_response["values"]
+                # Extract publishers, subscribers, and services from the response
+                # Note: rosapi uses "publishing" and "subscribing" field names
+                publishers = values.get("publishing", [])
+                subscribers = values.get("subscribing", [])
+                services = values.get("services", [])
+
+                node_details[node] = {
+                    "publishers": publishers,
+                    "subscribers": subscribers,
+                    "services": services,
+                    "publisher_count": len(publishers),
+                    "subscriber_count": len(subscribers),
+                    "service_count": len(services),
+                }
+            elif (
+                node_details_response
+                and "result" in node_details_response
+                and not node_details_response["result"]
+            ):
+                error_msg = node_details_response.get("values", {}).get(
+                    "message", "Service call failed"
+                )
+                node_errors.append(f"Node {node}: {error_msg}")
+            else:
+                node_errors.append(f"Node {node}: Failed to get node details")
+
+        return {
+            "total_nodes": len(nodes),
+            "nodes": node_details,
+            "node_errors": node_errors,  # Include any errors encountered during inspection
+        }
+
+
+@mcp.tool(
+    description=(
         "Get a single ROS parameter value by name.\nExample:\nget_param('/turtlesim:background_b')"
     )
 )
@@ -1133,42 +1297,36 @@ def get_parameters() -> dict:
 
 @mcp.tool(
     description=(
-        "Get comprehensive information about all ROS parameters including values and metadata.\n"
+        "Get detailed information about ROS parameters including types and values.\n"
         "Example:\n"
-        "inspect_all_parameters()"
+        "inspect_parameters('/turtlesim:background_b,/turtlesim:background_g')"
     )
 )
-def inspect_all_parameters() -> dict:
+def inspect_parameters(names: str) -> dict:
     """
-    Get comprehensive information about all ROS parameters including values and metadata.
+    Get detailed information about ROS parameters including types and values.
+
+    Args:
+        names (str): Comma-separated parameter names to inspect
 
     Returns:
-        dict: Contains detailed information about all parameters,
-            including parameter names, values, and metadata.
+        dict: Contains detailed parameter information, or error message if failed.
     """
-    # First get all parameters
-    parameters_message = {
-        "op": "call_service",
-        "service": "/rosapi/get_param_names",
-        "type": "rosapi/GetParamNames",
-        "args": {},
-        "id": "inspect_all_parameters_request_1",
-    }
+    if not names or not names.strip():
+        return {"error": "At least one parameter name must be provided"}
 
-    with ws_manager:
-        parameters_response = ws_manager.request(parameters_message)
+    # Parse comma-separated parameter names
+    param_names = [name.strip() for name in names.split(",") if name.strip()]
+    if not param_names:
+        return {"error": "No valid parameter names provided"}
 
-        if not parameters_response or "values" not in parameters_response:
-            return {"error": "Failed to get parameters list"}
+    result = {"total_parameters": len(param_names), "parameters": {}, "parameter_errors": []}
 
-        parameters = parameters_response["values"].get("names", [])
-        parameter_details = {}
-
-        # Get details for each parameter
-        parameter_errors = []
-        for param_name in parameters:
-            # Get parameter value
-            value_message = {
+    # Get details for each parameter using the working get_param function
+    for param_name in param_names:
+        try:
+            # Use the working get_param function logic
+            message = {
                 "op": "call_service",
                 "service": "/rosapi/get_param",
                 "type": "rosapi/GetParam",
@@ -1176,211 +1334,32 @@ def inspect_all_parameters() -> dict:
                 "id": f"get_param_{param_name.replace('/', '_').replace(':', '_')}",
             }
 
-            value_response = ws_manager.request(value_message)
-            param_value = ""
-            param_successful = False
-            if value_response and "values" in value_response:
-                value_data = value_response["values"]
-                param_value = value_data.get("value", "")
-                param_successful = value_data.get("successful", False)
-            elif value_response and "result" in value_response and value_response["result"]:
-                value_data = value_response["result"]
-                param_value = value_data.get("value", "")
-                param_successful = value_data.get("successful", False)
-            elif value_response and "error" in value_response:
-                parameter_errors.append(f"Parameter {param_name}: {value_response['error']}")
+            with ws_manager:
+                response = ws_manager.request(message)
 
-            # Get parameter type (using describe_parameters service)
-            type_message = {
-                "op": "call_service",
-                "service": "/rosapi/describe_parameters",
-                "type": "rcl_interfaces/DescribeParameters",
-                "args": {"names": [param_name]},
-                "id": f"describe_param_{param_name.replace('/', '_').replace(':', '_')}",
-            }
+            if response and "values" in response:
+                result_data = response["values"]
+                param_value = result_data.get("value", "")
+                param_successful = result_data.get("successful", False)
+            elif response and "result" in response and response["result"]:
+                result_data = response["result"]
+                param_value = result_data.get("value", "")
+                param_successful = result_data.get("successful", False)
+            else:
+                result["parameter_errors"].append(f"Parameter {param_name}: Failed to get value")
+                continue
 
-            type_response = ws_manager.request(type_message)
-            param_type = "unknown"
-            if type_response and "result" in type_response and type_response["result"]:
-                result_data = type_response["result"]
-                if isinstance(result_data, dict):
-                    descriptors = result_data.get("descriptors", [])
-                    if descriptors and len(descriptors) > 0:
-                        param_type = descriptors[0].get("type", "unknown")
-            elif type_response and "error" in type_response:
-                parameter_errors.append(f"Parameter {param_name} type: {type_response['error']}")
-
-            parameter_details[param_name] = {
+            result["parameters"][param_name] = {
                 "value": param_value,
-                "type": param_type,
+                "type": "unknown",  # Type detection disabled for now
                 "exists": param_successful,
             }
 
-        return {
-            "total_parameters": len(parameters),
-            "parameters": parameter_details,
-            "parameter_errors": parameter_errors,  # Include any errors encountered during inspection
-        }
-
-
-@mcp.tool(
-    description=(
-        "Get detailed information about a specific node including its publishers, subscribers, and services.\n"
-        "Example:\n"
-        "get_node_details('/turtlesim')"
-    )
-)
-def get_node_details(node: str) -> dict:
-    """
-    Get detailed information about a specific node including its publishers, subscribers, and services.
-
-    Args:
-        node (str): The node name (e.g., '/turtlesim')
-
-    Returns:
-        dict: Contains detailed node information including publishers, subscribers, and services,
-            or an error message if node doesn't exist.
-    """
-    # Validate input
-    if not node or not node.strip():
-        return {"error": "Node name cannot be empty"}
-
-    result = {
-        "node": node,
-        "publishers": [],
-        "subscribers": [],
-        "services": [],
-        "publisher_count": 0,
-        "subscriber_count": 0,
-        "service_count": 0,
-    }
-
-    # rosbridge service call to get node details
-    message = {
-        "op": "call_service",
-        "service": "/rosapi/node_details",
-        "type": "rosapi/NodeDetails",
-        "args": {"node": node},
-        "id": f"get_node_details_{node.replace('/', '_')}",
-    }
-
-    # Request node details from rosbridge
-    with ws_manager:
-        response = ws_manager.request(message)
-
-    # Check for service response errors first
-    if response and "result" in response and not response["result"]:
-        # Service call failed - return error with details from values
-        error_msg = response.get("values", {}).get("message", "Service call failed")
-        return {"error": f"Service call failed: {error_msg}"}
-
-    # Extract data from the response
-    if response and "values" in response:
-        values = response["values"]
-        # Extract publishers, subscribers, and services from the response
-        # Note: rosapi uses "publishing" and "subscribing" field names
-        publishers = values.get("publishing", [])
-        subscribers = values.get("subscribing", [])
-        services = values.get("services", [])
-
-        result["publishers"] = publishers
-        result["subscribers"] = subscribers
-        result["services"] = services
-        result["publisher_count"] = len(publishers)
-        result["subscriber_count"] = len(subscribers)
-        result["service_count"] = len(services)
-
-    # Check if we got any data
-    if not result["publishers"] and not result["subscribers"] and not result["services"]:
-        return {"error": f"Node {node} not found or has no details available"}
+        except Exception as e:
+            result["parameter_errors"].append(f"Parameter {param_name}: Exception - {str(e)}")
+            continue
 
     return result
-
-
-@mcp.tool(
-    description=(
-        "Get comprehensive information about all ROS nodes including their publishers, subscribers, and services.\n"
-        "Example:\n"
-        "inspect_all_nodes()"
-    )
-)
-def inspect_all_nodes() -> dict:
-    """
-    Get comprehensive information about all ROS nodes including their publishers, subscribers, and services.
-
-    Returns:
-        dict: Contains detailed information about all nodes including:
-            - Node names and details
-            - Publishers for each node
-            - Subscribers for each node
-            - Services provided by each node
-            - Connection counts and statistics
-    """
-    # First get all nodes
-    nodes_message = {
-        "op": "call_service",
-        "service": "/rosapi/nodes",
-        "type": "rosapi/Nodes",
-        "args": {},
-        "id": "inspect_all_nodes_request_1",
-    }
-
-    with ws_manager:
-        nodes_response = ws_manager.request(nodes_message)
-
-        if not nodes_response or "values" not in nodes_response:
-            return {"error": "Failed to get nodes list"}
-
-        nodes = nodes_response["values"].get("nodes", [])
-        node_details = {}
-
-        # Get details for each node
-        node_errors = []
-        for node in nodes:
-            # Get node details (publishers, subscribers, services)
-            node_details_message = {
-                "op": "call_service",
-                "service": "/rosapi/node_details",
-                "type": "rosapi/NodeDetails",
-                "args": {"node": node},
-                "id": f"get_node_details_{node.replace('/', '_')}",
-            }
-
-            node_details_response = ws_manager.request(node_details_message)
-
-            if node_details_response and "values" in node_details_response:
-                values = node_details_response["values"]
-                # Extract publishers, subscribers, and services from the response
-                # Note: rosapi uses "publishing" and "subscribing" field names
-                publishers = values.get("publishing", [])
-                subscribers = values.get("subscribing", [])
-                services = values.get("services", [])
-
-                node_details[node] = {
-                    "publishers": publishers,
-                    "subscribers": subscribers,
-                    "services": services,
-                    "publisher_count": len(publishers),
-                    "subscriber_count": len(subscribers),
-                    "service_count": len(services),
-                }
-            elif (
-                node_details_response
-                and "result" in node_details_response
-                and not node_details_response["result"]
-            ):
-                error_msg = node_details_response.get("values", {}).get(
-                    "message", "Service call failed"
-                )
-                node_errors.append(f"Node {node}: {error_msg}")
-            else:
-                node_errors.append(f"Node {node}: Failed to get node details")
-
-        return {
-            "total_nodes": len(nodes),
-            "nodes": node_details,
-            "node_errors": node_errors,  # Include any errors encountered during inspection
-        }
 
 
 ## ############################################################################################## ##
