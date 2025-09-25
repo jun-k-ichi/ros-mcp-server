@@ -336,3 +336,45 @@ def call_service(
             "success": False,
             "error": "No response received from service call",
         }
+
+
+def register_service_tools(mcp_instance, ws_manager):
+    """Register all ROS service tools with the MCP instance."""
+
+    @mcp_instance.tool(
+        description="Get list of all available ROS services.\nExample:\nget_services()"
+    )
+    def get_services_tool() -> dict:
+        return get_services(ws_manager)
+
+    @mcp_instance.tool(
+        description="Get the service type for a specific service.\nExample:\nget_service_type('/rosapi/topics')"
+    )
+    def get_service_type_tool(service: str) -> dict:
+        return get_service_type(service, ws_manager)
+
+    @mcp_instance.tool(
+        description="Get complete service details including request and response structures.\nExample:\nget_service_details('my_package/CustomService')"
+    )
+    def get_service_details_tool(service_type: str) -> dict:
+        return get_service_details(service_type, ws_manager)
+
+    @mcp_instance.tool(
+        description="Get list of nodes that provide a specific service.\nExample:\nget_service_providers('/rosapi/topics')"
+    )
+    def get_service_providers_tool(service: str) -> dict:
+        return get_service_providers(service, ws_manager)
+
+    @mcp_instance.tool(
+        description="Get comprehensive information about all services including types and providers.\nExample:\ninspect_all_services()"
+    )
+    def inspect_all_services_tool() -> dict:
+        return inspect_all_services(ws_manager)
+
+    @mcp_instance.tool(
+        description="Call a ROS service with specified request data.\nExample:\ncall_service('/rosapi/topics', 'rosapi/Topics', {})\ncall_service('/slow_service', 'my_package/SlowService', {}, timeout=10.0)  # Specify timeout only for slow services"
+    )
+    def call_service_tool(
+        service_name: str, service_type: str, request: dict, timeout: Optional[float] = None
+    ) -> dict:
+        return call_service(service_name, service_type, request, ws_manager, timeout)
