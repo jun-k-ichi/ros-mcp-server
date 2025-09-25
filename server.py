@@ -846,13 +846,6 @@ def publish_for_durations(
     }
 
 
-## ############################################################################################## ##
-##
-##                       ROS SERVICES
-##
-## ############################################################################################## ##
-
-
 @mcp.tool(description=("Get list of all currently running ROS nodes.\nExample:\nget_nodes()"))
 def get_nodes() -> dict:
     """
