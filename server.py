@@ -1253,6 +1253,347 @@ def get_nodes() -> dict:
 
 @mcp.tool(
     description=(
+        "Get a single ROS parameter value by name.\nExample:\nget_param('/turtlesim:background_b')"
+    )
+)
+def get_param(name: str) -> dict:
+    """
+    Get a single ROS parameter value by name.
+
+    Args:
+        name (str): The parameter name (e.g., '/turtlesim:background_b')
+
+    Returns:
+        dict: Contains parameter value and metadata, or error message if parameter not found.
+    """
+    if not name or not name.strip():
+        return {"error": "Parameter name cannot be empty"}
+
+    message = {
+        "op": "call_service",
+        "service": "/rosapi/get_param",
+        "type": "rosapi/GetParam",
+        "args": {"name": name},
+        "id": f"get_param_{name.replace('/', '_').replace(':', '_')}",
+    }
+
+    with ws_manager:
+        response = ws_manager.request(message)
+
+    if response and "values" in response:
+        result_data = response["values"]
+        return {
+            "name": name,
+            "value": result_data.get("value", ""),
+            "successful": result_data.get("successful", False),
+            "reason": result_data.get("reason", ""),
+        }
+    elif response and "result" in response and response["result"]:
+        result_data = response["result"]
+        return {
+            "name": name,
+            "value": result_data.get("value", ""),
+            "successful": result_data.get("successful", False),
+            "reason": result_data.get("reason", ""),
+        }
+    else:
+        error_msg = (
+            response.get("values", {}).get("message", "Service call failed")
+            if response
+            else "No response"
+        )
+        return {"error": f"Failed to get parameter {name}: {error_msg}"}
+
+
+@mcp.tool(
+    description=(
+        "Set a single ROS parameter value.\nExample:\nset_param('/turtlesim:background_b', '255')"
+    )
+)
+def set_param(name: str, value: str) -> dict:
+    """
+    Set a single ROS parameter value.
+
+    Args:
+        name (str): The parameter name (e.g., '/turtlesim:background_b')
+        value (str): The parameter value to set
+
+    Returns:
+        dict: Contains success status and metadata, or error message if failed.
+    """
+    if not name or not name.strip():
+        return {"error": "Parameter name cannot be empty"}
+
+    message = {
+        "op": "call_service",
+        "service": "/rosapi/set_param",
+        "type": "rosapi/SetParam",
+        "args": {"name": name, "value": value},
+        "id": f"set_param_{name.replace('/', '_').replace(':', '_')}",
+    }
+
+    with ws_manager:
+        response = ws_manager.request(message)
+
+    if response and "values" in response:
+        result_data = response["values"]
+        return {
+            "name": name,
+            "value": value,
+            "successful": result_data.get("successful", False),
+            "reason": result_data.get("reason", ""),
+        }
+    elif response and "result" in response and response["result"]:
+        result_data = response["result"]
+        return {
+            "name": name,
+            "value": value,
+            "successful": result_data.get("successful", False),
+            "reason": result_data.get("reason", ""),
+        }
+    else:
+        error_msg = (
+            response.get("values", {}).get("message", "Service call failed")
+            if response
+            else "No response"
+        )
+        return {"error": f"Failed to set parameter {name}: {error_msg}"}
+
+
+@mcp.tool(
+    description=("Check if a ROS parameter exists.\nExample:\nhas_param('/turtlesim:background_b')")
+)
+def has_param(name: str) -> dict:
+    """
+    Check if a ROS parameter exists.
+
+    Args:
+        name (str): The parameter name (e.g., '/turtlesim:background_b')
+
+    Returns:
+        dict: Contains existence status and metadata, or error message if failed.
+    """
+    if not name or not name.strip():
+        return {"error": "Parameter name cannot be empty"}
+
+    message = {
+        "op": "call_service",
+        "service": "/rosapi/has_param",
+        "type": "rosapi/HasParam",
+        "args": {"name": name},
+        "id": f"has_param_{name.replace('/', '_').replace(':', '_')}",
+    }
+
+    with ws_manager:
+        response = ws_manager.request(message)
+
+    if response and "values" in response:
+        result_data = response["values"]
+        return {
+            "name": name,
+            "exists": result_data.get("exists", False),
+            "successful": result_data.get("successful", False),
+            "reason": result_data.get("reason", ""),
+        }
+    elif response and "result" in response and response["result"]:
+        result_data = response["result"]
+        return {
+            "name": name,
+            "exists": result_data.get("exists", False),
+            "successful": result_data.get("successful", False),
+            "reason": result_data.get("reason", ""),
+        }
+    else:
+        error_msg = (
+            response.get("values", {}).get("message", "Service call failed")
+            if response
+            else "No response"
+        )
+        return {"error": f"Failed to check parameter {name}: {error_msg}"}
+
+
+@mcp.tool(
+    description=("Delete a ROS parameter.\nExample:\ndelete_param('/turtlesim:background_b')")
+)
+def delete_param(name: str) -> dict:
+    """
+    Delete a ROS parameter.
+
+    Args:
+        name (str): The parameter name (e.g., '/turtlesim:background_b')
+
+    Returns:
+        dict: Contains success status and metadata, or error message if failed.
+    """
+    if not name or not name.strip():
+        return {"error": "Parameter name cannot be empty"}
+
+    message = {
+        "op": "call_service",
+        "service": "/rosapi/delete_param",
+        "type": "rosapi/DeleteParam",
+        "args": {"name": name},
+        "id": f"delete_param_{name.replace('/', '_').replace(':', '_')}",
+    }
+
+    with ws_manager:
+        response = ws_manager.request(message)
+
+    if response and "values" in response:
+        result_data = response["values"]
+        return {
+            "name": name,
+            "successful": result_data.get("successful", False),
+            "reason": result_data.get("reason", ""),
+        }
+    elif response and "result" in response and response["result"]:
+        result_data = response["result"]
+        return {
+            "name": name,
+            "successful": result_data.get("successful", False),
+            "reason": result_data.get("reason", ""),
+        }
+    else:
+        error_msg = (
+            response.get("values", {}).get("message", "Service call failed")
+            if response
+            else "No response"
+        )
+        return {"error": f"Failed to delete parameter {name}: {error_msg}"}
+
+
+@mcp.tool(description=("Get list of all ROS parameter names.\nExample:\nget_parameters()"))
+def get_parameters() -> dict:
+    """
+    Get list of all ROS parameter names.
+
+    Returns:
+        dict: Contains list of all parameter names, or error message if failed.
+    """
+    message = {
+        "op": "call_service",
+        "service": "/rosapi/get_param_names",
+        "type": "rosapi/GetParamNames",
+        "args": {},
+        "id": "get_parameters_request_1",
+    }
+
+    with ws_manager:
+        response = ws_manager.request(message)
+
+    if response and "values" in response:
+        names = response["values"].get("names", [])
+        return {"parameters": names, "parameter_count": len(names)}
+    elif response and "result" in response and response["result"]:
+        result_data = response["result"]
+        if isinstance(result_data, dict):
+            names = result_data.get("names", [])
+        else:
+            names = []
+        return {"parameters": names, "parameter_count": len(names)}
+    else:
+        error_msg = (
+            response.get("values", {}).get("message", "Service call failed")
+            if response
+            else "No response"
+        )
+        return {"error": f"Failed to get parameter names: {error_msg}"}
+
+
+@mcp.tool(
+    description=(
+        "Get comprehensive information about all ROS parameters including values and metadata.\n"
+        "Example:\n"
+        "inspect_all_parameters()"
+    )
+)
+def inspect_all_parameters() -> dict:
+    """
+    Get comprehensive information about all ROS parameters including values and metadata.
+
+    Returns:
+        dict: Contains detailed information about all parameters,
+            including parameter names, values, and metadata.
+    """
+    # First get all parameters
+    parameters_message = {
+        "op": "call_service",
+        "service": "/rosapi/get_param_names",
+        "type": "rosapi/GetParamNames",
+        "args": {},
+        "id": "inspect_all_parameters_request_1",
+    }
+
+    with ws_manager:
+        parameters_response = ws_manager.request(parameters_message)
+
+        if not parameters_response or "values" not in parameters_response:
+            return {"error": "Failed to get parameters list"}
+
+        parameters = parameters_response["values"].get("names", [])
+        parameter_details = {}
+
+        # Get details for each parameter
+        parameter_errors = []
+        for param_name in parameters:
+            # Get parameter value
+            value_message = {
+                "op": "call_service",
+                "service": "/rosapi/get_param",
+                "type": "rosapi/GetParam",
+                "args": {"name": param_name},
+                "id": f"get_param_{param_name.replace('/', '_').replace(':', '_')}",
+            }
+
+            value_response = ws_manager.request(value_message)
+            param_value = ""
+            param_successful = False
+            if value_response and "values" in value_response:
+                value_data = value_response["values"]
+                param_value = value_data.get("value", "")
+                param_successful = value_data.get("successful", False)
+            elif value_response and "result" in value_response and value_response["result"]:
+                value_data = value_response["result"]
+                param_value = value_data.get("value", "")
+                param_successful = value_data.get("successful", False)
+            elif value_response and "error" in value_response:
+                parameter_errors.append(f"Parameter {param_name}: {value_response['error']}")
+
+            # Get parameter type (using describe_parameters service)
+            type_message = {
+                "op": "call_service",
+                "service": "/rosapi/describe_parameters",
+                "type": "rcl_interfaces/DescribeParameters",
+                "args": {"names": [param_name]},
+                "id": f"describe_param_{param_name.replace('/', '_').replace(':', '_')}",
+            }
+
+            type_response = ws_manager.request(type_message)
+            param_type = "unknown"
+            if type_response and "result" in type_response and type_response["result"]:
+                result_data = type_response["result"]
+                if isinstance(result_data, dict):
+                    descriptors = result_data.get("descriptors", [])
+                    if descriptors and len(descriptors) > 0:
+                        param_type = descriptors[0].get("type", "unknown")
+            elif type_response and "error" in type_response:
+                parameter_errors.append(f"Parameter {param_name} type: {type_response['error']}")
+
+            parameter_details[param_name] = {
+                "value": param_value,
+                "type": param_type,
+                "exists": param_successful,
+            }
+
+        return {
+            "total_parameters": len(parameters),
+            "parameters": parameter_details,
+            "parameter_errors": parameter_errors,  # Include any errors encountered during inspection
+        }
+
+
+@mcp.tool(
+    description=(
         "Get detailed information about a specific node including its publishers, subscribers, and services.\n"
         "Example:\n"
         "get_node_details('/turtlesim')"
