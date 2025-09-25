@@ -850,11 +850,7 @@ def publish_for_durations(
     }
 
 
-@mcp.tool(
-    description=(
-        "Get list of all currently running ROS nodes.\nExample:\nget_nodes()"
-    )
-)
+@mcp.tool(description=("Get list of all currently running ROS nodes.\nExample:\nget_nodes()"))
 def get_nodes() -> dict:
     """
     Get list of all currently running ROS nodes.
