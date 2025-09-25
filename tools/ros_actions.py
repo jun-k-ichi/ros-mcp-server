@@ -432,3 +432,49 @@ def cancel_action_goal(action_name: str, goal_id: str, ws_manager) -> dict:
         "status": "cancel_sent",
         "note": "Cancel request sent successfully. Action may still be executing.",
     }
+
+
+def register_action_tools(mcp_instance, ws_manager):
+    """Register all ROS action tools with the MCP instance."""
+
+    @mcp_instance.tool(
+        description="Get list of all available ROS actions.\nExample:\nget_actions()"
+    )
+    def get_actions_tool() -> dict:
+        return get_actions(ws_manager)
+
+    @mcp_instance.tool(
+        description="Get the action type for a specific action.\nExample:\nget_action_type('/turtle1/rotate_absolute')"
+    )
+    def get_action_type_tool(action: str) -> dict:
+        return get_action_type(action, ws_manager)
+
+    @mcp_instance.tool(
+        description="Get complete action details including goal, result, and feedback structures.\nExample:\nget_action_details('turtlesim/action/RotateAbsolute')"
+    )
+    def get_action_details_tool(action_type: str) -> dict:
+        return get_action_details(action_type, ws_manager)
+
+    @mcp_instance.tool(
+        description="Get comprehensive information about all actions including types and available actions.\nExample:\ninspect_all_actions()"
+    )
+    def inspect_all_actions_tool() -> dict:
+        return inspect_all_actions(ws_manager)
+
+    @mcp_instance.tool(
+        description="Send a goal to a ROS action server.\nExample:\nsend_action_goal('/turtle1/rotate_absolute', 'turtlesim/action/RotateAbsolute', {'theta': 1.57})\nsend_action_goal('/turtle1/rotate_absolute', 'turtlesim/action/RotateAbsolute', {'theta': 1.57}, blocking=False)  # Non-blocking"
+    )
+    def send_action_goal_tool(
+        action_name: str,
+        action_type: str,
+        goal: dict,
+        timeout: Optional[float] = None,
+        blocking: bool = True,
+    ) -> dict:
+        return send_action_goal(action_name, action_type, goal, ws_manager, timeout, blocking)
+
+    @mcp_instance.tool(
+        description="Cancel a specific action goal.\nExample:\ncancel_action_goal('/turtle1/rotate_absolute', 'goal_1758653551839_21acd486')"
+    )
+    def cancel_action_goal_tool(action_name: str, goal_id: str) -> dict:
+        return cancel_action_goal(action_name, goal_id, ws_manager)
