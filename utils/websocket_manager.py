@@ -98,13 +98,14 @@ class WebSocketManager:
         self.ws = None
         self.lock = threading.RLock()
 
+
     def set_ip(self, ip: str, port: int):
         """
         Set the IP and port for the WebSocket connection.
         """
-        self.ip = ip
+        self.ip = ip.strip()
         self.port = port
-        print(f"[WebSocket] IP set to {self.ip}:{self.port}")
+        print(f"[DEBUG] IP set to {self.ip}:{self.port}")
 
     def connect(self) -> Optional[str]:
         """
