@@ -171,8 +171,8 @@ def get_service_providers(service: str, ws_manager) -> dict:
     # rosbridge service call to get service providers
     message = {
         "op": "call_service",
-        "service": "/rosapi/service_providers",
-        "type": "rosapi/ServiceProviders",
+        "service": "/rosapi/service_node",
+        "type": "rosapi/ServiceNode",
         "args": {"service": service},
         "id": f"get_service_providers_request_{service.replace('/', '_')}",
     }
@@ -183,8 +183,21 @@ def get_service_providers(service: str, ws_manager) -> dict:
 
     # Return service providers if present
     if response and "values" in response:
-        providers = response["values"].get("providers", [])
-        return {"service": service, "providers": providers, "provider_count": len(providers)}
+        # The response format is {"node": "node_name"} not {"providers": [...]}
+        node = response["values"].get("node")
+        if node:
+            providers = [node]  # Convert single node to list
+            return {"service": service, "providers": providers, "provider_count": len(providers)}
+        else:
+            return {"service": service, "providers": [], "provider_count": 0}
+    elif response and "result" in response:
+        # Alternative response format with "result" instead of "values"
+        node = response["result"].get("node")
+        if node:
+            providers = [node]  # Convert single node to list
+            return {"service": service, "providers": providers, "provider_count": len(providers)}
+        else:
+            return {"service": service, "providers": [], "provider_count": 0}
     else:
         return {"error": f"Failed to get providers for service {service}"}
 
