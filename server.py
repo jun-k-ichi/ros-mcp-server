@@ -1023,7 +1023,7 @@ def has_param(name: str) -> dict:
         return {
             "name": name,
             "exists": result_data.get("exists", False),
-            "successful": result_data.get("successful", False),
+            "successful": True,  # Service call was successful
             "reason": result_data.get("reason", ""),
         }
     elif response and "result" in response and response["result"]:
@@ -1031,7 +1031,7 @@ def has_param(name: str) -> dict:
         return {
             "name": name,
             "exists": result_data.get("exists", False),
-            "successful": result_data.get("successful", False),
+            "successful": True,  # Service call was successful
             "reason": result_data.get("reason", ""),
         }
     else:
