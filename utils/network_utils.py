@@ -111,6 +111,7 @@ def ping_ip_and_port(
 
     return result
 
+
 def normalize_ip(ip: Optional[Union[str, list, int, float]]) -> str:
     """Return a valid IPv4 string, fallback to localhost if invalid."""
     if ip is None:
