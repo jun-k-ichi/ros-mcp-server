@@ -18,7 +18,7 @@
 
 1. **Install dependencies**: `curl -LsSf https://astral.sh/uv/install.sh | sh` and `ngrok config add-authtoken <YOUR_AUTHTOKEN>`
 2. **Clone repository**: `cd ~ && git clone https://github.com/robotmcp/ros-mcp-server.git && cd ros-mcp-server`
-3. **Start MCP server**: `export MCP_TRANSPORT="streamable-http" && uv run server.py`
+3. **Start MCP server**: `uv run server.py --transport streamable-http --host 127.0.0.1 --port 9000`
 4. **Start ngrok tunnel**: `ngrok http --url=your-domain.ngrok-free.app 9000`
 5. **Configure ChatGPT**: Add connector with URL `https://your-domain.ngrok-free.app/mcp`
 6. **Start ROS**: `ros2 launch rosbridge_server rosbridge_websocket_launch.xml & ros2 run turtlesim turtlesim_node`
@@ -114,12 +114,10 @@ ngrok config add-authtoken <YOUR_AUTHTOKEN>
 	```
 	</details>
 
-* In WSL (Linux), consider adding all your `MCP` variable to `.bashrc`
+* In WSL (Linux), consider adding your ngrok domain to `.bashrc` for convenience
 
 ```bash
-export MCP_HOST=127.0.0.1
-export MCP_PORT=9000
-export MCP_DOMAIN=abc123-xyz789.ngrok-free.app
+export MCP_DOMAIN=your-domain.ngrok-free.app
 ```
 
 ### Install ROS-MCP Server
@@ -140,22 +138,15 @@ cd ros-mcp-server
 	<details>
 	<summary><strong>Option A: PowerShell (Windows)</strong></summary>
 
-	In PowerShell, set the tranport protocol:
-	
+	If you installed `uv` use the following:
 	```bash
-	$env:MCP_TRANSPORT="streamable-http" 
-	```
-	
-	If you installed `uv` used the following:
-	```bash
-
-	uv run server.py
+	uv run server.py --transport streamable-http --host 127.0.0.1 --port 9000
 	```
 	
 	Otherwise you have to install all the dependencies manually and run:
 
 	```bash
-	python server.py
+	python server.py --transport streamable-http --host 127.0.0.1 --port 9000
 	```
 	
 	</details>
@@ -163,15 +154,12 @@ cd ros-mcp-server
 	<details>
 	<summary><strong>Option B: WSL (Linux)</strong></summary>
 
-	Open WSL
-
-	Run the following:
+	Open WSL and run the following:
 	```bash
-	export MCP_TRANSPORT="streamable-http"
-	uv run server.py
+	uv run server.py --transport streamable-http --host 127.0.0.1 --port 9000
 	```
 
-	or
+	or use the launch script (which will be updated to use command-line arguments):
 
 	```bash
 	cd scripts
@@ -179,7 +167,7 @@ cd ros-mcp-server
 	```
 	</details>
 
-* By default, the server should start at `127.0.0.1:9000`, you can set `MCP_HOST` and `MCP_PORT` variables as needed
+* The server will start at `127.0.0.1:9000` by default. You can customize the host and port using the `--host` and `--port` arguments.
 
 
 
@@ -190,30 +178,28 @@ cd ros-mcp-server
   	<details>
 	<summary><strong>Option A: PowerShell (Windows)</strong></summary>
 
-	In PowerShell, set the local port to tunnel:
+	In PowerShell, set your ngrok domain:
 	
 	```bash
-	$env:MCP_PORT=9000
 	$env:MCP_DOMAIN=<YOUR_DOMAIN>
 	```
 	Run `ngrok` to tunnel your ROS-MCP server.
 	
 	```bash
-	ngrok http --url=$env:MCP_DOMAIN $env:MCP_PORT
+	ngrok http --url=$env:MCP_DOMAIN 9000
 	```
 	</details>
 
 	<details>
 	<summary><strong>Option B: WSL (Linux)</strong></summary>
 
-	In WSL, set the local port to tunnel:
+	In WSL, set your ngrok domain:
 	```bash
-	export MCP_PORT=9000
-    export MCP_DOMAIN=<YOUR_DOMAIN>
+	export MCP_DOMAIN=<YOUR_DOMAIN>
 	```
  	Run `ngrok` to tunnel your ROS-MCP server.
 	```bash
-	ngrok http --url=${MCP_DOMAIN} ${MCP_PORT}
+	ngrok http --url=${MCP_DOMAIN} 9000
 	```
 	Or you can also launch:
 	```bash
@@ -327,20 +313,28 @@ Once connected, you can use natural language to interact with your ROS system:
 
 ## 4. Advanced Configuration
 
-### Environment Variables
+### Command-line Arguments
 
-You can customize the MCP server behavior with these environment variables:
+You can customize the MCP server behavior with command-line arguments:
 
 ```bash
-# ROS Bridge settings
-export ROSBRIDGE_IP="127.0.0.1"  # Default: localhost
-export ROSBRIDGE_PORT="9090"     # Default: 9090
+# Show all available options
+python server.py --help
 
-# MCP Transport settings
-export MCP_TRANSPORT="streamable-http"  # For ChatGPT: streamable-http
-export MCP_HOST="127.0.0.1"             # For HTTP transport
-export MCP_PORT="9000"                  # For HTTP transport
+# Different transport options
+python server.py --transport stdio                    # Default: stdio
+python server.py --transport http --host 0.0.0.0 --port 9000
+python server.py --transport streamable-http --host 127.0.0.1 --port 9000
 
+# Custom host and port
+python server.py --transport streamable-http --host 0.0.0.0 --port 8080
+```
+
+### Environment Variables (for ngrok)
+
+You can still use environment variables for ngrok configuration:
+
+```bash
 # Ngrok settings
 export MCP_DOMAIN="your-domain.ngrok-free.app"  # Your ngrok domain
 ```
