@@ -7,6 +7,11 @@
 ![GitHub Repo stars](https://img.shields.io/github/stars/robotmcp/ros-mcp-server?style=social)
 ![GitHub last commit](https://img.shields.io/github/last-commit/robotmcp/ros-mcp-server)
 
+<!-- README.md (English, default) -->
+<p align="right">
+  <a href="./README.md">English</a> |
+  <a href="./README.ja.md">日本語</a>
+</p>
 
 <p align="center">
   <img src="https://github.com/robotmcp/ros-mcp-server/blob/main/docs/images/framework.png"/>
